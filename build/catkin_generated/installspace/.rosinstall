@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/jetson/pyroscope_ws/install/setup.sh
