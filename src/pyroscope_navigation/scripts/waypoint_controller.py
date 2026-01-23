@@ -48,8 +48,8 @@ class WaypointController:
         self.control_timer = rospy.Timer(rospy.Duration(1.0/self.control_frequency), self.control_loop)
 
         rospy.loginfo("Waypoint Controller initialized")
-        rospy.loginfo(f"  Linear gain: {self.linear_gain}, Angular gain: {self.angular_gain}")
-        rospy.loginfo(f"  Max velocities: {self.max_linear_vel} m/s, {self.max_angular_vel} rad/s")
+        rospy.loginfo("  Linear gain: {}, Angular gain: {}".format(self.linear_gain, self.angular_gain))
+        rospy.loginfo("  Max velocities: {} m/s, {} rad/s".format(self.max_linear_vel, self.max_angular_vel))
 
     def odom_callback(self, msg):
         """Update current pose from odometry"""
@@ -68,7 +68,7 @@ class WaypointController:
         self.goal_reached = False
         self.last_distance = None
         self.last_progress_time = rospy.Time.now()
-        rospy.loginfo(f"New target: ({msg.pose.position.x:.2f}, {msg.pose.position.y:.2f})")
+        rospy.loginfo("New target: ({:.2f}, {:.2f})".format(msg.pose.position.x, msg.pose.position.y))
 
     def get_yaw_from_quaternion(self, orientation):
         """Extract yaw angle from quaternion"""
@@ -102,7 +102,7 @@ class WaypointController:
         # Check if goal reached
         if distance < self.goal_tolerance:
             if not self.goal_reached:
-                rospy.loginfo(f"Goal reached! Distance: {distance:.3f}m")
+                rospy.loginfo("Goal reached! Distance: {:.3f}m".format(distance))
                 self.goal_reached = True
                 self.goal_reached_pub.publish(Bool(data=True))
             return Twist()  # Stop
@@ -132,7 +132,7 @@ class WaypointController:
             if abs(self.last_distance - distance) < 0.05:  # Less than 5cm progress
                 time_since_progress = (rospy.Time.now() - self.last_progress_time).to_sec()
                 if time_since_progress > 5.0:  # Stalled for 5 seconds
-                    rospy.logwarn(f"Progress stalled! Distance: {distance:.2f}m")
+                    rospy.logwarn("Progress stalled! Distance: {:.2f}m".format(distance))
                     self.stalled_pub.publish(Bool(data=True))
             else:
                 self.last_progress_time = rospy.Time.now()

@@ -24,7 +24,7 @@ def send_waypoint(x, y):
     msg.pose.position.z = 0.0
     msg.pose.orientation.w = 1.0
 
-    rospy.loginfo(f"Sending waypoint: ({x}, {y})")
+    rospy.loginfo("Sending waypoint: ({}, {})".format(x, y))
     pub.publish(msg)
     rospy.sleep(1)  # Keep node alive briefly
 
