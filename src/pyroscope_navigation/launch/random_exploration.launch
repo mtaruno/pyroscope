@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Random Exploration Launch File -->
+  <!-- Simple random walk - no odometry needed! -->
+
+  <!-- Exploration Parameters -->
+  <arg name="forward_duration" default="3.0" />   <!-- seconds to move forward -->
+  <arg name="turn_duration" default="2.0" />      <!-- seconds to turn -->
+  <arg name="forward_speed" default="0.2" />      <!-- m/s -->
+  <arg name="turn_speed" default="0.5" />         <!-- rad/s -->
+  <arg name="update_rate" default="10.0" />       <!-- Hz -->
+
+  <!-- Choose exploration mode -->
+  <arg name="use_obstacle_detection" default="false" />
+
+  <!-- Simple Random Explorer (no obstacle avoidance) -->
+  <node pkg="pyroscope_navigation" type="random_explorer.py" name="random_explorer"
+        output="screen" unless="$(arg use_obstacle_detection)">
+    <param name="forward_duration" value="$(arg forward_duration)" />
+    <param name="turn_duration" value="$(arg turn_duration)" />
+    <param name="forward_speed" value="$(arg forward_speed)" />
+    <param name="turn_speed" value="$(arg turn_speed)" />
+    <param name="update_rate" value="$(arg update_rate)" />
+  </node>
+
+  <!-- Explorer with Obstacle Detection Hook (for later) -->
+  <node pkg="pyroscope_navigation" type="random_explorer_with_obstacle.py" name="random_explorer"
+        output="screen" if="$(arg use_obstacle_detection)">
+    <param name="forward_duration" value="$(arg forward_duration)" />
+    <param name="turn_duration" value="$(arg turn_duration)" />
+    <param name="forward_speed" value="$(arg forward_speed)" />
+    <param name="turn_speed" value="$(arg turn_speed)" />
+    <param name="update_rate" value="$(arg update_rate)" />
+  </node>
+
+  <!-- Usage Examples:
+
+       Basic random exploration:
+       $ roslaunch pyroscope_navigation random_exploration.launch
+
+       Adjust speed:
+       $ roslaunch pyroscope_navigation random_exploration.launch forward_speed:=0.3 turn_speed:=0.8
+
+       With obstacle detection (once you add ZED depth processing):
+       $ roslaunch pyroscope_navigation random_exploration.launch use_obstacle_detection:=true
+  -->
+
+</launch>

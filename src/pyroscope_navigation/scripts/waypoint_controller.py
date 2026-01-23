@@ -41,7 +41,7 @@ class WaypointController:
 
         # Subscribers - try both odom and ZED odom topics
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
-        rospy.Subscriber('/zed2i/odom', Odometry, self.odom_callback)  # ZED camera odometry
+        # rospy.Subscriber('/zed2i/odom', Odometry, self.odom_callback)  # ZED camera odometry
         rospy.Subscriber('/nav/target_waypoint', PoseStamped, self.target_callback)
 
         # Control loop timer
