@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<launch>
+  <!-- Simple Exploration Launch File -->
+  <!-- Just starts the waypoint controller - you send waypoints manually -->
+
+  <!-- Waypoint Controller Parameters -->
+  <arg name="linear_gain" default="0.5" />
+  <arg name="angular_gain" default="1.5" />
+  <arg name="max_linear_vel" default="0.3" />   <!-- m/s - tune for your rover -->
+  <arg name="max_angular_vel" default="0.8" />  <!-- rad/s -->
+  <arg name="goal_tolerance" default="0.5" />   <!-- meters -->
+  <arg name="control_frequency" default="10.0" /> <!-- Hz -->
+
+  <!-- Waypoint Controller Node -->
+  <node pkg="pyroscope_navigation" type="waypoint_controller.py" name="waypoint_controller" output="screen">
+    <param name="linear_gain" value="$(arg linear_gain)" />
+    <param name="angular_gain" value="$(arg angular_gain)" />
+    <param name="max_linear_vel" value="$(arg max_linear_vel)" />
+    <param name="max_angular_vel" value="$(arg max_angular_vel)" />
+    <param name="goal_tolerance" value="$(arg goal_tolerance)" />
+    <param name="control_frequency" value="$(arg control_frequency)" />
+  </node>
+
+  <!-- Usage: Send waypoints with:
+       rosrun pyroscope_navigation test_single_waypoint.py <x> <y>
+
+       Or manually:
+       rostopic pub /nav/target_waypoint geometry_msgs/PoseStamped "header:
+         frame_id: 'odom'
+       pose:
+         position: {x: 2.0, y: 3.0, z: 0.0}
+         orientation: {w: 1.0}"
+  -->
+
+</launch>

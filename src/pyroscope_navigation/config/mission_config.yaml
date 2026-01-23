@@ -1,0 +1,29 @@
+# Mission Configuration for Pyroscope Navigation
+# Defines the plot locations and navigation parameters
+
+# Origin point (starting location)
+origin: [0.0, 0.0]
+
+# Plot locations to visit (in order)
+# Each plot has an ID and position [x, y] in meters relative to origin
+plots:
+  - id: "plot_north"
+    position: [0.0, 10.0]  # 10m north of origin
+
+  - id: "plot_east"
+    position: [10.0, 0.0]  # 10m east of origin
+
+  - id: "plot_south"
+    position: [0.0, -10.0]  # 10m south of origin
+
+  - id: "plot_west"
+    position: [-10.0, 0.0]  # 10m west of origin
+
+# Navigation thresholds and limits
+thresholds:
+  plot_arrival: 0.5       # Distance threshold to consider plot reached (meters)
+  origin_arrival: 0.3     # Distance threshold to consider origin reached (meters)
+  max_time_to_plot: 120.0 # Maximum time allowed to reach a plot (seconds)
+
+# Note: Adjust plot positions based on your actual field setup
+# Positive X = East, Positive Y = North (standard ROS convention)
