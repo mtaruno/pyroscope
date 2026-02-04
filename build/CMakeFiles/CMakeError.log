@@ -1,25 +1,25 @@
 Determining if the pthread_create exist failed with the following output:
-Change Dir: /home/jetson/pyroscope_ws/build/CMakeFiles/CMakeTmp
+Change Dir: /home/jetson/pyroscope/build/CMakeFiles/CMakeTmp
 
-Run Build Command:"/usr/bin/make" "cmTC_64eb7/fast"
-/usr/bin/make -f CMakeFiles/cmTC_64eb7.dir/build.make CMakeFiles/cmTC_64eb7.dir/build
-make[1]: Entering directory '/home/jetson/pyroscope_ws/build/CMakeFiles/CMakeTmp'
-Building C object CMakeFiles/cmTC_64eb7.dir/CheckSymbolExists.c.o
-/usr/bin/cc    -o CMakeFiles/cmTC_64eb7.dir/CheckSymbolExists.c.o   -c /home/jetson/pyroscope_ws/build/CMakeFiles/CMakeTmp/CheckSymbolExists.c
-Linking C executable cmTC_64eb7
-/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_64eb7.dir/link.txt --verbose=1
-/usr/bin/cc      -rdynamic CMakeFiles/cmTC_64eb7.dir/CheckSymbolExists.c.o  -o cmTC_64eb7 
-CMakeFiles/cmTC_64eb7.dir/CheckSymbolExists.c.o: In function `main':
+Run Build Command:"/usr/bin/make" "cmTC_57f4f/fast"
+/usr/bin/make -f CMakeFiles/cmTC_57f4f.dir/build.make CMakeFiles/cmTC_57f4f.dir/build
+make[1]: Entering directory '/home/jetson/pyroscope/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_57f4f.dir/CheckSymbolExists.c.o
+/usr/bin/cc    -o CMakeFiles/cmTC_57f4f.dir/CheckSymbolExists.c.o   -c /home/jetson/pyroscope/build/CMakeFiles/CMakeTmp/CheckSymbolExists.c
+Linking C executable cmTC_57f4f
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_57f4f.dir/link.txt --verbose=1
+/usr/bin/cc      -rdynamic CMakeFiles/cmTC_57f4f.dir/CheckSymbolExists.c.o  -o cmTC_57f4f 
+CMakeFiles/cmTC_57f4f.dir/CheckSymbolExists.c.o: In function `main':
 CheckSymbolExists.c:(.text+0x14): undefined reference to `pthread_create'
 CheckSymbolExists.c:(.text+0x18): undefined reference to `pthread_create'
 collect2: error: ld returned 1 exit status
-CMakeFiles/cmTC_64eb7.dir/build.make:97: recipe for target 'cmTC_64eb7' failed
-make[1]: *** [cmTC_64eb7] Error 1
-make[1]: Leaving directory '/home/jetson/pyroscope_ws/build/CMakeFiles/CMakeTmp'
-Makefile:126: recipe for target 'cmTC_64eb7/fast' failed
-make: *** [cmTC_64eb7/fast] Error 2
+CMakeFiles/cmTC_57f4f.dir/build.make:97: recipe for target 'cmTC_57f4f' failed
+make[1]: *** [cmTC_57f4f] Error 1
+make[1]: Leaving directory '/home/jetson/pyroscope/build/CMakeFiles/CMakeTmp'
+Makefile:126: recipe for target 'cmTC_57f4f/fast' failed
+make: *** [cmTC_57f4f/fast] Error 2
 
-File /home/jetson/pyroscope_ws/build/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
+File /home/jetson/pyroscope/build/CMakeFiles/CMakeTmp/CheckSymbolExists.c:
 /* */
 #include <pthread.h>
 
@@ -35,22 +35,22 @@ int main(int argc, char** argv)
 }
 
 Determining if the function pthread_create exists in the pthreads failed with the following output:
-Change Dir: /home/jetson/pyroscope_ws/build/CMakeFiles/CMakeTmp
+Change Dir: /home/jetson/pyroscope/build/CMakeFiles/CMakeTmp
 
-Run Build Command:"/usr/bin/make" "cmTC_6634c/fast"
-/usr/bin/make -f CMakeFiles/cmTC_6634c.dir/build.make CMakeFiles/cmTC_6634c.dir/build
-make[1]: Entering directory '/home/jetson/pyroscope_ws/build/CMakeFiles/CMakeTmp'
-Building C object CMakeFiles/cmTC_6634c.dir/CheckFunctionExists.c.o
-/usr/bin/cc   -DCHECK_FUNCTION_EXISTS=pthread_create   -o CMakeFiles/cmTC_6634c.dir/CheckFunctionExists.c.o   -c /usr/share/cmake-3.10/Modules/CheckFunctionExists.c
-Linking C executable cmTC_6634c
-/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_6634c.dir/link.txt --verbose=1
-/usr/bin/cc  -DCHECK_FUNCTION_EXISTS=pthread_create    -rdynamic CMakeFiles/cmTC_6634c.dir/CheckFunctionExists.c.o  -o cmTC_6634c -lpthreads 
+Run Build Command:"/usr/bin/make" "cmTC_981c9/fast"
+/usr/bin/make -f CMakeFiles/cmTC_981c9.dir/build.make CMakeFiles/cmTC_981c9.dir/build
+make[1]: Entering directory '/home/jetson/pyroscope/build/CMakeFiles/CMakeTmp'
+Building C object CMakeFiles/cmTC_981c9.dir/CheckFunctionExists.c.o
+/usr/bin/cc   -DCHECK_FUNCTION_EXISTS=pthread_create   -o CMakeFiles/cmTC_981c9.dir/CheckFunctionExists.c.o   -c /usr/share/cmake-3.10/Modules/CheckFunctionExists.c
+Linking C executable cmTC_981c9
+/usr/bin/cmake -E cmake_link_script CMakeFiles/cmTC_981c9.dir/link.txt --verbose=1
+/usr/bin/cc  -DCHECK_FUNCTION_EXISTS=pthread_create    -rdynamic CMakeFiles/cmTC_981c9.dir/CheckFunctionExists.c.o  -o cmTC_981c9 -lpthreads 
 /usr/bin/ld: cannot find -lpthreads
 collect2: error: ld returned 1 exit status
-CMakeFiles/cmTC_6634c.dir/build.make:97: recipe for target 'cmTC_6634c' failed
-make[1]: *** [cmTC_6634c] Error 1
-make[1]: Leaving directory '/home/jetson/pyroscope_ws/build/CMakeFiles/CMakeTmp'
-Makefile:126: recipe for target 'cmTC_6634c/fast' failed
-make: *** [cmTC_6634c/fast] Error 2
+CMakeFiles/cmTC_981c9.dir/build.make:97: recipe for target 'cmTC_981c9' failed
+make[1]: *** [cmTC_981c9] Error 1
+make[1]: Leaving directory '/home/jetson/pyroscope/build/CMakeFiles/CMakeTmp'
+Makefile:126: recipe for target 'cmTC_981c9/fast' failed
+make: *** [cmTC_981c9/fast] Error 2
 
 

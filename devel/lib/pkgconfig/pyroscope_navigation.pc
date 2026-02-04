@@ -1,0 +1,8 @@
+prefix=/home/jetson/pyroscope/devel
+
+Name: pyroscope_navigation
+Description: Description of pyroscope_navigation
+Version: 0.1.0
+Cflags: 
+Libs: -L${prefix}/lib 
+Requires: 

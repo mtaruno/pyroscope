@@ -12,7 +12,6 @@ find_package(catkin REQUIRED COMPONENTS
 catkin_package()
 
 catkin_install_python(PROGRAMS
-  scripts/state_machine.py
   scripts/waypoint_controller.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

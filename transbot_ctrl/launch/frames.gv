@@ -1,0 +1,16 @@
+digraph G {
+"dummy" -> "base_link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10000.000 Hz\nMost recent transform: 0.000 \nBuffer length: 0.000 sec\n"];
+"odom" -> "dummy"[label="Broadcaster: /ekf_localization\nAverage rate: 20.162 Hz\nMost recent transform: 1770104773.543 \nBuffer length: 4.910 sec\n"];
+"arm_Link" -> "arm1_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"base_link" -> "arm_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"arm2_Link" -> "arm2_1_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"arm1_Link" -> "arm2_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"arm3_Link" -> "arm3_1_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"arm1_Link" -> "arm3_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"arm1_Link" -> "arm4_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"arm1_Link" -> "arm5_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"camera_Link" -> "camera1_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"base_link" -> "camera_Link"[label="Broadcaster: /robot_state_publisher\nAverage rate: 10.207 Hz\nMost recent transform: 1770104773.492 \nBuffer length: 4.800 sec\n"];
+"base_link" -> "laser"[label="Broadcaster: /lidar_tf\nAverage rate: 10.181 Hz\nMost recent transform: 1770104773.625 \nBuffer length: 4.813 sec\n"];
+"base_link" -> "imu_link"[label="Broadcaster: /base_link_to_imu_link\nAverage rate: 10.194 Hz\nMost recent transform: 1770104773.624 \nBuffer length: 4.807 sec\n"];
+}
