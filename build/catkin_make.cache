@@ -1,2 +1,2 @@
-pyroscope_navigation
--DCATKIN_DEVEL_PREFIX=/home/jetson/pyroscope/devel -DCMAKE_INSTALL_PREFIX=/home/jetson/pyroscope/install -G Unix Makefiles
+pyroscope_navigation:transbot_slam
+-DCATKIN_DEVEL_PREFIX=/home/gixstudent/pyroscope/devel -DCMAKE_INSTALL_PREFIX=/home/gixstudent/pyroscope/install -G Unix Makefiles

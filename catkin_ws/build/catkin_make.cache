@@ -1,0 +1,2 @@
+transbot_bringup
+-DCATKIN_DEVEL_PREFIX=/home/gixstudent/pyroscope/catkin_ws/devel -DCMAKE_INSTALL_PREFIX=/home/gixstudent/pyroscope/catkin_ws/install -G Unix Makefiles
