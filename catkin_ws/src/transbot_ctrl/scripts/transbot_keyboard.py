@@ -82,14 +82,14 @@ speedBindings = {
 
 
 def getKey():
-    # tty.setraw():½«ÎÄ¼þÃèÊö·ûfdÄ£Ê½¸ü¸ÄÎªraw£»fileno():·µ»ØÒ»¸öÕûÐÎµÄÎÄ¼þÃèÊö·û(fd)
+    # tty.setraw():ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½fdÄ£Ê½ï¿½ï¿½ï¿½ï¿½Îªrawï¿½ï¿½fileno():ï¿½ï¿½ï¿½ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½Îµï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½(fd)
     tty.setraw(sys.stdin.fileno())
-    # select():Ö±½Óµ÷ÓÃ²Ù×÷ÏµÍ³µÄIO½Ó¿Ú£»¼à¿ØËùÓÐ´øfileno()·½·¨µÄÎÄ¼þ¾ä±ú
+    # select():Ö±ï¿½Óµï¿½ï¿½Ã²ï¿½ï¿½ï¿½ÏµÍ³ï¿½ï¿½IOï¿½Ó¿Ú£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ð´ï¿½fileno()ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½
     rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
-    # ¶ÁÈ¡Ò»¸ö×Ö½ÚµÄÊäÈëÁ÷
+    # ï¿½ï¿½È¡Ò»ï¿½ï¿½ï¿½Ö½Úµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     if rlist: key = sys.stdin.read(1)
     else: key = ''
-    # tcsetattr´ÓÊôÐÔÉèÖÃÎÄ¼þÃèÊö·ûfdµÄttyÊôÐÔ
+    # tcsetattrï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½fdï¿½ï¿½ttyï¿½ï¿½ï¿½ï¿½
     termios.tcsetattr(sys.stdin, termios.TCSADRAIN, settings)
     return key
 
@@ -103,7 +103,7 @@ if __name__ == "__main__":
     rospy.init_node('transbot_keyboard')
     linear_limit = rospy.get_param('~linear_limit', 0.45)
     angular_limit = rospy.get_param('~angular_limit', 2.0)
-    pub = rospy.Publisher('~/cmd_vel', Twist, queue_size=1)
+    pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
     (speed, turn) = (0.2, 1.0)
     (x, th) = (0, 0)
     status = 0
@@ -112,33 +112,33 @@ if __name__ == "__main__":
         print(msg)
         print(vels(speed, turn))
         while (1):
-            # »ñÈ¡µ±Ç°°´¼üÐÅÏ¢
+            # ï¿½ï¿½È¡ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
             key = getKey()
-            # °´¼ü×Ö·û´®ÅÐ¶ÏÊÇ·ñÔÚÒÆ¶¯×ÖµäÖÐ
+            # ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½Æ¶ï¿½ï¿½Öµï¿½ï¿½ï¿½
             if key in moveBindings.keys():
                 x = moveBindings[key][0]
                 th = moveBindings[key][1]
                 count = 0
-            # °´¼ü×Ö·û´®ÅÐ¶ÏÊÇ·ñÔÚËÙ¶È×ÖµäÖÐ
+            # ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½ï¿½Ð¶ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½Ù¶ï¿½ï¿½Öµï¿½ï¿½ï¿½
             elif key in speedBindings.keys():
                 speed = speed * speedBindings[key][0]
                 turn = turn * speedBindings[key][1]
                 count = 0
-                # ËÙ¶ÈÏÞÖÆ
+                # ï¿½Ù¶ï¿½ï¿½ï¿½ï¿½ï¿½
                 if speed > linear_limit: speed = linear_limit
                 if turn > angular_limit: turn = angular_limit
                 print(vels(speed, turn))
-                # ÀÛ¼ÆÒ»¶¨´ÎÊý´Î´òÓ¡Ò»´ÎmsgÐÅÏ¢
+                # ï¿½Û¼ï¿½Ò»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î´ï¿½Ó¡Ò»ï¿½ï¿½msgï¿½ï¿½Ï¢
                 if (status == 14): print(msg)
                 status = (status + 1) % 15
-            # Èç¹û°´¼üÊÇ' '»òÕß'k'£¬ÔòÍ£Ö¹ÔË¶¯
+            # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½' 'ï¿½ï¿½ï¿½ï¿½'k'ï¿½ï¿½ï¿½ï¿½Í£Ö¹ï¿½Ë¶ï¿½
             elif key == ' ': (x, th) = (0, 0)
             else:
-                # ÉèÖÃÈç¹û²»ÊÇ³¤°´¾ÍÍ£Ö¹ÔË¶¯¹¦ÄÜ
+                # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç³ï¿½ï¿½ï¿½ï¿½ï¿½Í£Ö¹ï¿½Ë¶ï¿½ï¿½ï¿½ï¿½ï¿½
                 count = count + 1
                 if count > 4: (x, th) = (0, 0)
                 if (key == '\x03'): break
-            # ·¢²¼ÏûÏ¢
+            # ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
             twist = Twist()
             twist.linear.x = speed * x
             twist.angular.z = turn * th
