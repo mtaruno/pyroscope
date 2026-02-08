@@ -1,31 +1,32 @@
 DWAPlannerROS:
-  # Robot velocity limits (conservative for Transbot tank drive)
-  max_vel_x: 0.2
-  min_vel_x: -0.1
+  # Robot velocity limits
+  max_vel_x: 0.35
+  min_vel_x: -0.15
   max_vel_y: 0.0       # non-holonomic, no lateral movement
   min_vel_y: 0.0
-  max_vel_theta: 1.0
-  min_vel_theta: -1.0
-  acc_lim_x: 1.0
+  max_vel_theta: 1.5
+  min_vel_theta: -1.5
+  min_vel_trans: 0.05   # minimum translational velocity — prevents creeping
+  acc_lim_x: 1.5
   acc_lim_y: 0.0
-  acc_lim_theta: 2.0
+  acc_lim_theta: 3.0
 
-  # Goal tolerances
-  yaw_goal_tolerance: 0.15
-  xy_goal_tolerance: 0.10
-  latch_xy_goal_tolerance: false
+  # Goal tolerances (relaxed for imperfect maps)
+  yaw_goal_tolerance: 0.3
+  xy_goal_tolerance: 0.20
+  latch_xy_goal_tolerance: true
 
   # Forward simulation
-  sim_time: 2.0
+  sim_time: 1.5
   sim_granularity: 0.05
-  vx_samples: 10
+  vx_samples: 12
   vy_samples: 1         # only 1 since no lateral motion
   vtheta_samples: 20
 
-  # Trajectory scoring
-  path_distance_bias: 32.0
-  goal_distance_bias: 24.0
-  occdist_scale: 0.05
+  # Trajectory scoring — favor reaching the goal over staying on path
+  path_distance_bias: 20.0
+  goal_distance_bias: 32.0
+  occdist_scale: 0.02
 
   # Oscillation prevention
-  oscillation_reset_dist: 0.05
+  oscillation_reset_dist: 0.10
