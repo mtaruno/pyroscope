@@ -34,6 +34,10 @@ if __name__ == '__main__':
     print("  s: Backward")
     print("  a: Turn left")
     print("  d: Turn right")
+    print("  u: Left track only")
+    print("  i: Right track only")
+    print("  j: Left track backward")
+    print("  k: Right track backward")
     print("  x: Stop")
     print("  q: Quit")
     print("\nPress a key...\n")
@@ -55,6 +59,22 @@ if __name__ == '__main__':
             elif key == 'd':
                 print("Turn right")
                 cmd.angular.z = -0.5
+            elif key == 'u':
+                print("Left track forward only")
+                cmd.linear.x = 0.15
+                cmd.angular.z = -0.3  # Turn right to move left track more
+            elif key == 'i':
+                print("Right track forward only")
+                cmd.linear.x = 0.15
+                cmd.angular.z = 0.3   # Turn left to move right track more
+            elif key == 'j':
+                print("Left track backward only")
+                cmd.linear.x = -0.15
+                cmd.angular.z = 0.3   # Turn left while going backward
+            elif key == 'k':
+                print("Right track backward only")
+                cmd.linear.x = -0.15
+                cmd.angular.z = -0.3  # Turn right while going backward
             elif key == 'x':
                 print("Stop")
                 cmd = Twist()

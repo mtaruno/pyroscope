@@ -1,14 +1,17 @@
 # pyroscope
 
-Look at this! 
 
-Nobody really collects data on the ground in these environments. 
+![Beezley Trail](image.png)
 
-Pyroscope is a camera rover that automates plot scale surface-fuel sampling for prescribed fire and AI fuel mapping. Pyroscope is a small, lightweight, maneuvarable rover that is used to collect data in shrublands. 
+This is Beezley trail, one of the shrublands 2.5 hour drive away from Seattle. Land managers need to know the fuel load of these shrubberies to make plans about wildfire initiatives. 
 
-Instead of asking scientists and practitioners to walk every plot, hold the camera at the right height, and manually match to photo series, Pyroscope aims to do the walking and photographing for them, feeding data directly into existing workflows (Photoload, Fuels Data, Wildlands, BurnPro3D, FUELVISION, etc).
+Nobody really collects data on the ground in these environments. Neither can they usually afford people to walk these trails and manually measure fuel loads. 
 
-Wildfire behavior and prescribed-fire planning depend heavily on surface fuel loads at the plot scale - especially 1-, 10-, and 100-hour woody fuels, litter, duff, grasses, and shrubs. Handbooks like Brown et al. (1982) define how to measure these fuels, and Photoload (Kean & Dickinson 2007) shows how to estimate them from downward-looking photos.
+Pyroscope is a rover equipped with a depth camera, GPS, and thermal camera. It is designed to automate plot scale surface-fuel sampling for prescribed fire and AI fuel mapping. 
+
+Pyroscope is small, lightweight, and maneuverable. This is in contrast to typical rovers that roam around the forest that are often larger and crush vegetation as it moves. 
+
+The idea is that land managers will get a dashboard.
 
 ### Navigation
 

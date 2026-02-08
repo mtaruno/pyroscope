@@ -1,0 +1,62 @@
+<launch>
+    <!-- Map file argument (path to .yaml file from map_saver) -->
+    <arg name="map_file" default="$(find transbot_nav)/maps/my_map.yaml"/>
+
+    <!-- Static TF: base_link to laser -->
+    <node pkg="tf" type="static_transform_publisher" name="lidar_tf"
+          args="0 0 0.15 0 0 0 base_link laser 100" />
+
+    <!-- Map Server -->
+    <node pkg="map_server" type="map_server" name="map_server" args="$(arg map_file)" output="screen"/>
+
+    <!-- AMCL localization -->
+    <node pkg="amcl" type="amcl" name="amcl" output="screen">
+        <!-- Overall filter parameters -->
+        <param name="min_particles" value="100"/>
+        <param name="max_particles" value="500"/>
+        <param name="update_min_d" value="0.1"/>
+        <param name="update_min_a" value="0.2"/>
+        <param name="resample_interval" value="1"/>
+        <param name="transform_tolerance" value="0.5"/>
+
+        <!-- Laser model -->
+        <param name="laser_model_type" value="likelihood_field"/>
+        <param name="laser_max_beams" value="60"/>
+        <param name="laser_max_range" value="8.0"/>
+        <param name="laser_z_hit" value="0.95"/>
+        <param name="laser_z_rand" value="0.05"/>
+
+        <!-- Odometry model (differential drive) -->
+        <param name="odom_model_type" value="diff"/>
+        <param name="odom_frame_id" value="odom"/>
+        <param name="base_frame_id" value="base_link"/>
+        <param name="global_frame_id" value="map"/>
+        <param name="odom_alpha1" value="0.2"/>
+        <param name="odom_alpha2" value="0.2"/>
+        <param name="odom_alpha3" value="0.2"/>
+        <param name="odom_alpha4" value="0.2"/>
+
+        <!-- Initial pose (center of map, facing forward) -->
+        <param name="initial_pose_x" value="0.0"/>
+        <param name="initial_pose_y" value="0.0"/>
+        <param name="initial_pose_a" value="0.0"/>
+    </node>
+
+    <!-- Move Base -->
+    <node pkg="move_base" type="move_base" name="move_base" output="screen">
+        <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
+
+        <rosparam file="$(find transbot_nav)/config/costmap_common.yaml" command="load" ns="global_costmap"/>
+        <rosparam file="$(find transbot_nav)/config/costmap_common.yaml" command="load" ns="local_costmap"/>
+        <rosparam file="$(find transbot_nav)/config/global_costmap.yaml" command="load"/>
+        <rosparam file="$(find transbot_nav)/config/local_costmap.yaml" command="load"/>
+        <rosparam file="$(find transbot_nav)/config/base_local_planner.yaml" command="load"/>
+
+        <!-- Planner frequency -->
+        <param name="planner_frequency" value="1.0"/>
+        <param name="controller_frequency" value="5.0"/>
+
+        <!-- Recovery behaviors -->
+        <param name="clearing_rotation_allowed" value="true"/>
+    </node>
+</launch>
