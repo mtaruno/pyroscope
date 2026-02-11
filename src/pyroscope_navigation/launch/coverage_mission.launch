@@ -1,0 +1,31 @@
+<launch>
+    <!-- Waypoint controller (drives to individual waypoints) -->
+    <node pkg="pyroscope_navigation" type="waypoint_controller.py" name="waypoint_controller" output="screen">
+        <param name="goal_tolerance" value="0.5"/>
+        <param name="max_linear_vel" value="0.3"/>
+        <param name="max_angular_vel" value="0.8"/>
+    </node>
+
+    <!-- Lidar obstacle detector -->
+    <node pkg="pyroscope_navigation" type="lidar_obstacle_detector.py" name="lidar_obstacle_detector" output="screen">
+        <param name="stop_distance" value="0.30"/>
+        <param name="front_arc_degrees" value="30.0"/>
+    </node>
+
+    <!-- Safety stop override -->
+    <node pkg="pyroscope_navigation" type="safety_stop.py" name="safety_stop" output="screen">
+        <param name="override_duration" value="0.5"/>
+    </node>
+
+    <!-- Coverage planner (lawnmower pattern) -->
+    <node pkg="pyroscope_navigation" type="coverage_planner.py" name="coverage_planner" output="screen">
+        <param name="area_width" value="10.0"/>
+        <param name="area_height" value="10.0"/>
+        <param name="row_spacing" value="1.0"/>
+        <param name="waypoint_spacing" value="1.0"/>
+        <param name="origin_x" value="0.0"/>
+        <param name="origin_y" value="0.0"/>
+        <param name="dwell_time" value="3.0"/>
+        <param name="waypoint_timeout" value="30.0"/>
+    </node>
+</launch>

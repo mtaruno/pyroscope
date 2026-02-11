@@ -1,0 +1,13 @@
+<launch>
+    <!-- Lidar obstacle detector -->
+    <node pkg="pyroscope_navigation" type="lidar_obstacle_detector.py" name="lidar_obstacle_detector" output="screen">
+        <param name="stop_distance" value="0.30"/>
+        <param name="front_arc_degrees" value="30.0"/>
+        <param name="min_range" value="0.12"/>
+    </node>
+
+    <!-- Safety stop override -->
+    <node pkg="pyroscope_navigation" type="safety_stop.py" name="safety_stop" output="screen">
+        <param name="override_duration" value="0.5"/>
+    </node>
+</launch>
