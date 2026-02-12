@@ -16,7 +16,10 @@ Pyroscope is a rover equipped with a depth camera, GPS, and thermal camera. It i
 
 Pyroscope is small, lightweight, and maneuverable. This is in contrast to typical rovers that roam around the forest that are often larger and crush vegetation as it moves. 
 
-The idea is that land managers will get a dashboard.
+The idea is that land managers will get a dashboard that gives them near real time information of ground conditions; and get alerts of potential wildfire outbreaks.
+
+Here is the architecture of Pyroscope:
+![alt text](<CleanShot 2026-02-12 at 00.28.06@2x.png>)
 
 ### Navigation
 
