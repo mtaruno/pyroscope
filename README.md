@@ -2,8 +2,7 @@
 
 This is a shrubland close to Ellensburg, WA, which is around a 2 hour drive away from Seattle. 
 
-![shrubs](shrubland.jpg)
-
+![shrubs](shrubland.jpeg)
 
 One problem that these land managers face are wildfires. In this area itself, there was a huge one in 2012 that burned much of the trees that make up the shrubland. Land managers need to know the fuel load of these shrubberies to make plans about wildfire initiatives. But they don't have the time to sit around and do that. Worse, nobody really collects data on the ground in these environments. Neither can they usually afford people to walk these trails and manually measure fuel loads. 
 
@@ -23,12 +22,15 @@ Here is the architecture of Pyroscope:
 
 ### Navigation
 
-The navigation system is built on ROS Melodic and runs across two machines: the Transbot (Jetson) handles hardware drivers and sensors, while a remote Ubuntu 18.04 PC runs the higher-level planning and navigation.
+The navigation system is built on ROS Melodic and runs across two machines: the Transbot (Jetson) handles hardware drivers and sensors, while a remote Ubuntu 18.04 PC runs navigation modules such as obstacle detection and high-level path planning.
 
 #### SLAM & Mapping
 - GMapping builds a 2D occupancy grid map using the RPLidar and wheel odometry
 - Drive the robot manually with keyboard teleop to map the environment
 - Save the map for later use with `map_saver`
+
+`rosrun map_server map_saver -f ~/maps.hector_map`
+
 
 #### Autonomous Navigation
 - AMCL localizes the robot against a saved map
@@ -39,26 +41,85 @@ The navigation system is built on ROS Melodic and runs across two machines: the 
 - Pauses 3 seconds at each waypoint for thermal camera capture (`/coverage/capture_ready`)
 - Publishes mission progress to `/coverage/progress`
 
+To launch this coverage mission:
+1. roscore (on remote PC)
+2. roslaunch transbot_bringup bringup.launch (on Transbot)
+3. roslaunch rplidar_ros rplidar.launch (on Transbot)
+4. roslaunch transbot_nav navigation.launch map_file:=$(rospack find transbot_nav)/maps/pyroscope_map.yaml (on remote PC)
+5. rviz
+6. roslaunch pyroscope_navigation coverage_mission.launch
+7. roslaunch pyroscope_navigation coverage_mission.launch \
+    area_width:=5.0 \
+    area_height:=5.0 \
+    row_spacing:=0.8 \
+    waypoint_spacing:=0.5 \
+    origin_x:=0.0 \
+    origin_y:=0.0 \
+    dwell_time:=2.0 \
+    waypoint_timeout:=30.0
+
+Monitoring:
+7. rostopic echo /coverage/progress
+8. rostopic echo /coverage/complete
+9. rostopic echo/nav/goal_reached
+10. rostopic hz /scan
+11. rosrun tf view_frames && evince frames.pdf
+
+
 #### Obstacle Avoidance (two layers)
 - **Lidar obstacle detector** — monitors the front ±30° arc of the RPLidar scan. Publishes `/obstacle_detected` when anything is within 0.30m
 - **Safety stop** — last-resort layer that overrides `/cmd_vel` with a stop command whenever an obstacle is detected. Works during teleop, autonomous navigation, or exploration
 
-#### Key Launch Files
+This capability is automatically launched at `coverage_mission.launch`:
+1. Lidar obstacle detector (lidar_obstacle_detector.py)
+2. Safety stop (safety_stop.py)
+3. Waypoint controller (waypoint_controller.py)
+4. Coverage planner (coverage_planner.py)
 
-| Launch File | Description |
-|---|---|
-| `transbot_slam/slam_gmapping.launch` | Build a map with GMapping |
-| `transbot_nav/navigation.launch` | AMCL + move_base navigation with a saved map |
-| `pyroscope_navigation/coverage_mission.launch` | Full coverage mission (planner + obstacle avoidance) |
-| `pyroscope_navigation/obstacle_avoidance.launch` | Standalone obstacle avoidance layer |
-| `transbot_ctrl/transbot_keyboard.launch` | Keyboard teleoperation |
+To Verify Obstacle Detection is Running:
+
+**Check if the node is running**
+rosnode list | grep obstacle
+
+**Should see:**
+/lidar_obstacle_detector
+/safety_stop
+
+**Monitor obstacle detection**
+rostopic echo /obstacle_detected
+
+**Check what the lidar sees**
+rostopic echo /scan | head -50
+
+#### Key Launch Files
+| Launch File                                      | Description                                          |
+| ------------------------------------------------ | ---------------------------------------------------- |
+| `transbot_slam/slam_gmapping.launch`             | Build a map with GMapping                            |
+| `transbot_nav/navigation.launch`                 | AMCL + move_base navigation with a saved map         |
+| `pyroscope_navigation/coverage_mission.launch`   | Full coverage mission (planner + obstacle avoidance) |
+| `pyroscope_navigation/obstacle_avoidance.launch` | Standalone obstacle avoidance layer                  |
+| `transbot_ctrl/transbot_keyboard.launch`         | Keyboard teleoperation                               |
+
+#### ZED 2i Testing
+Simple hardware test:
+1. Plug the ZED 2i into a USB 3.0 port
+2. Run lsusb - you should see the camera listed as a USB device
+3. Check USB connection: dmesg | tail after plugging in
+
+With SDK installed:
+1. Download ZED SDK (make sure it's the right version for the Jetson)
+2. Install prerequisites: sudo apt install zstd
+3. Install the SDK following their installer
+4. Run test tools:
+  - ZED_Explorer - GUI tool to test camera
+  - ZED_Depth_Viewer - View depth output
+  - Run sample applications in /usr/local/zed/tools/
 
 ### Perception
 Percetion is led by Chenghao Wang. The perception system is responsible for taking downward-facing images of the fuel plots and estimating the surface fuel loads from these images.
 
-### Hardware
-Hardware is led by Annika An. 
-
+### Hardware + Design
+This is led by Annika An. She designed the hardware for the robot, putting together the Lidar, cameras, and other sensors. She also designed the front-end dashboard for the robot.
 
 ### Evaluating Success
 - Decision-ready plots per staff-day.
