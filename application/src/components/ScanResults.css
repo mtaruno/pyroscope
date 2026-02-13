@@ -1,0 +1,305 @@
+.scan-results {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--bg-main);
+}
+
+/* Header */
+.results-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  background: var(--bg-dark);
+  color: white;
+}
+
+.back-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.back-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.results-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+/* Content Layout */
+.results-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.results-sidebar {
+  width: 300px;
+  min-width: 300px;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border-light);
+  padding: 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.status-badge.completed {
+  background: linear-gradient(135deg, var(--primary-green) 0%, var(--primary-green-dark) 100%);
+  color: white;
+}
+
+/* Section Styling */
+.results-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.results-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--primary-green);
+  margin: 0;
+}
+
+/* Results Card */
+.results-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.results-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.results-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.results-value {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.results-value.editable {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.results-value.editable:hover {
+  color: var(--primary-green);
+}
+
+.results-value.mono {
+  font-family: 'Courier New', monospace;
+  font-size: 0.8rem;
+}
+
+/* Risk Level Colors */
+.results-value.risk-high {
+  color: var(--risk-high);
+  font-weight: 600;
+}
+
+.results-value.risk-medium {
+  color: var(--risk-medium);
+  font-weight: 600;
+}
+
+.results-value.risk-low {
+  color: var(--risk-low);
+  font-weight: 600;
+}
+
+/* Temperature Colors */
+.results-value.temp-high {
+  color: var(--risk-high);
+}
+
+.results-value.temp-low {
+  color: var(--risk-low);
+}
+
+/* Fuel Load Colors */
+.results-value.fuel-high {
+  color: var(--risk-high);
+  font-weight: 600;
+}
+
+.results-value.fuel-medium {
+  color: var(--risk-medium);
+  font-weight: 600;
+}
+
+.results-value.fuel-low {
+  color: var(--risk-low);
+  font-weight: 600;
+}
+
+/* Recommendations */
+.results-card.recommendations {
+  background: rgba(239, 68, 68, 0.05);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.recommendations-list {
+  margin: 0;
+  padding-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.recommendations-list li {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+/* Main Content - Thermal Map */
+.results-main {
+  flex: 1;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: #9ca3af;
+}
+
+.thermal-map-container {
+  flex: 1;
+  background: var(--bg-card);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.thermal-map-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 40px;
+}
+
+.thermal-icon {
+  color: var(--primary-green);
+  opacity: 0.5;
+}
+
+.thermal-map-placeholder h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.thermal-map-placeholder p {
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* Temperature Legend */
+.temperature-legend {
+  background: var(--bg-card);
+  border-radius: 12px;
+  padding: 16px 24px;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-self: flex-end;
+  min-width: 250px;
+}
+
+.legend-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.legend-gradient {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    #3b82f6 0%,
+    #06b6d4 20%,
+    #22c55e 40%,
+    #eab308 60%,
+    #f97316 80%,
+    #ef4444 100%
+  );
+}
+
+.legend-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .results-content {
+    flex-direction: column;
+  }
+  
+  .results-sidebar {
+    width: 100%;
+    min-width: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--border-light);
+  }
+  
+  .results-main {
+    padding: 16px;
+  }
+}
+

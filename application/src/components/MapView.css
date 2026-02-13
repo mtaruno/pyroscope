@@ -1,0 +1,449 @@
+.map-container {
+  flex: 1;
+  min-height: 200px;
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+  margin-bottom: 8px;
+}
+
+.leaflet-map {
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+}
+
+/* Custom Marker Styling */
+.custom-marker {
+  background: transparent;
+  border: none;
+}
+
+.marker-pin {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border: 2px solid rgba(255, 255, 255, 0.8);
+}
+
+.marker-inner {
+  width: 8px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+}
+
+/* Robot Target Marker */
+.robot-marker {
+  background: transparent !important;
+  border: none !important;
+  cursor: grab !important;
+}
+
+.robot-marker:active {
+  cursor: grabbing !important;
+}
+
+.robot-target {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.robot-target:hover {
+  transform: scale(1.1);
+}
+
+.robot-target:active {
+  cursor: grabbing;
+  transform: scale(0.95);
+}
+
+/* Invisible hitbox for easier dragging */
+.target-hitbox {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px;
+  height: 40px;
+  background: transparent;
+  border-radius: 50%;
+  z-index: 10;
+}
+
+/* Center dot */
+.target-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 6px;
+  height: 6px;
+  background: radial-gradient(circle, #fff 0%, #ef4444 100%);
+  border-radius: 50%;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.8);
+}
+
+.target-outer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 38px;
+  height: 38px;
+  border: 2px solid #ef4444;
+  border-radius: 50%;
+  opacity: 0.3;
+  animation: pulse-outer 2s infinite ease-in-out;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+}
+
+.target-inner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  height: 18px;
+  border: 2.5px solid #ef4444;
+  border-radius: 50%;
+  box-shadow: 
+    0 0 8px rgba(239, 68, 68, 0.5),
+    inset 0 0 4px rgba(239, 68, 68, 0.2);
+}
+
+.target-line {
+  position: absolute;
+  background: linear-gradient(to bottom, #ef4444, #f87171);
+  box-shadow: 0 0 4px rgba(239, 68, 68, 0.5);
+  border-radius: 1px;
+}
+
+.target-top {
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2.5px;
+  height: 10px;
+}
+
+.target-bottom {
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 2.5px;
+  height: 10px;
+}
+
+.target-left {
+  left: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 2.5px;
+}
+
+.target-right {
+  right: 2px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 2.5px;
+}
+
+@keyframes pulse-outer {
+  0%, 100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.3;
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.2);
+    opacity: 0.15;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+  }
+}
+
+/* Map Legend */
+.map-legend {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(30, 58, 47, 0.95);
+  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  padding: 12px 16px;
+  z-index: 1000;
+  min-width: 180px;
+  box-shadow: var(--shadow-lg);
+}
+
+.legend-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: white;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.legend-content {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: white;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.legend-item input[type="checkbox"] {
+  display: none;
+}
+
+.checkbox-custom {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  transition: all 0.2s;
+}
+
+.legend-item input:checked + .checkbox-custom {
+  background: var(--primary-green);
+  border-color: var(--primary-green);
+}
+
+.legend-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.legend-dot.low {
+  background: var(--risk-low);
+}
+
+.legend-dot.medium {
+  background: var(--risk-medium);
+}
+
+.legend-dot.high {
+  background: var(--risk-high);
+}
+
+.legend-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  margin: 8px 0;
+}
+
+.legend-frame-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.85rem;
+}
+
+.frame-line {
+  width: 28px;
+  height: 4px;
+  border-radius: 2px;
+  position: relative;
+}
+
+.frame-line.boundary {
+  background: linear-gradient(90deg, #22c55e, #4ade80);
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.5);
+}
+
+.frame-line.boundary::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 4px,
+    rgba(255,255,255,0.4) 4px,
+    rgba(255,255,255,0.4) 8px
+  );
+  transform: translateY(-50%);
+}
+
+.frame-line.scan {
+  background: linear-gradient(90deg, #e5e5e5, #ffffff);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+}
+
+.frame-line.scan::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent,
+    transparent 3px,
+    rgba(100,100,100,0.3) 3px,
+    rgba(100,100,100,0.3) 6px
+  );
+  transform: translateY(-50%);
+}
+
+/* Popup Styling */
+.marker-popup {
+  font-family: 'Outfit', sans-serif;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+
+.marker-popup.clickable {
+  cursor: pointer;
+}
+
+.marker-popup .popup-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.marker-popup .popup-date {
+  display: block;
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.marker-popup .popup-risk {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.marker-popup .popup-risk.low {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.marker-popup .popup-risk.medium {
+  background: rgba(234, 179, 8, 0.15);
+  color: #ca8a04;
+}
+
+.marker-popup .popup-risk.high {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+
+.marker-popup .popup-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  color: #888;
+  font-style: italic;
+}
+
+/* Make marker pins clickable */
+.risk-low .marker-pin,
+.risk-medium .marker-pin,
+.risk-high .marker-pin {
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.risk-low .marker-pin:hover,
+.risk-medium .marker-pin:hover,
+.risk-high .marker-pin:hover {
+  transform: scale(1.15);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4);
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  box-shadow: var(--shadow-md);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.leaflet-popup-content-wrapper:hover {
+  background-color: #f8f8f8;
+}
+
+.leaflet-popup-tip {
+  box-shadow: none;
+}
+
+/* Center Location Button */
+.center-location-btn {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+  width: 44px;
+  height: 44px;
+  background: rgba(30, 58, 47, 0.95);
+  backdrop-filter: blur(8px);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: var(--shadow-lg);
+  transition: all 0.2s ease;
+}
+
+.center-location-btn:hover {
+  background: var(--primary-green);
+  transform: scale(1.05);
+}
+
+.center-location-btn:active {
+  transform: scale(0.98);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .map-container {
+    min-height: 300px;
+  }
+  
+  .map-legend {
+    padding: 10px 12px;
+    min-width: 160px;
+  }
+}
+
