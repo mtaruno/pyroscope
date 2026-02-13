@@ -24,6 +24,8 @@ Here is the architecture of Pyroscope:
 
 The navigation system is built on ROS Melodic and runs across two machines: the Transbot (Jetson) handles hardware drivers and sensors, while a remote Ubuntu 18.04 PC runs navigation modules such as obstacle detection and high-level path planning.
 
+Here's the simplest operation, teleooperating the robot: roslaunch transbot_ctrl transbot_keyboard.launch
+
 #### SLAM & Mapping
 - GMapping builds a 2D occupancy grid map using the RPLidar and wheel odometry
 - Drive the robot manually with keyboard teleop to map the environment
@@ -47,8 +49,9 @@ To launch this coverage mission:
 3. roslaunch rplidar_ros rplidar.launch (on Transbot)
 4. roslaunch transbot_nav navigation.launch map_file:=$(rospack find transbot_nav)/maps/pyroscope_map.yaml (on remote PC)
 5. rviz
-6. roslaunch pyroscope_navigation coverage_mission.launch
-7. roslaunch pyroscope_navigation coverage_mission.launch \
+6. Make sure that you source the devel/setup.bash
+7. roslaunch pyroscope_navigation coverage_mission.launch
+8. roslaunch pyroscope_navigation coverage_mission.launch \
     area_width:=5.0 \
     area_height:=5.0 \
     row_spacing:=0.8 \

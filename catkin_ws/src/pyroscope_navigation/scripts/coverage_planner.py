@@ -148,7 +148,7 @@ class CoveragePlanner:
                     rospy.logwarn("Timeout reaching waypoint %d, skipping", self.current_index + 1)
                     break
 
-                # Obstacle detected — wait 5s then skip
+                # Obstacle detected - wait 5s then skip
                 if self.obstacle_detected:
                     if obstacle_start is None:
                         obstacle_start = rospy.Time.now()
