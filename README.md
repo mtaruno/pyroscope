@@ -61,6 +61,9 @@ To launch this coverage mission:
     dwell_time:=2.0 \
     waypoint_timeout:=30.0
 
+If you want to publish zero velocity in attempt to stop the robot:
+`rostopic pub -1 /cmd_vel geometry_msgs/Twist '{linear: {x: 0, y: 0, z: 0}, angular: {x: 0, y: 0, z: 0}}`
+
 Monitoring:
 7. rostopic echo /coverage/progress
 8. rostopic echo /coverage/complete

@@ -324,11 +324,52 @@ function App() {
     }
   }, [isScanning, isPaused])
 
-  const handleStartScan = () => {
-    setIsScanning(true)
-    setIsPaused(false)
-    setScanProgress(0)
-    setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
+  const handleStartScan = async () => {
+    try {
+      // Start the actual ROS coverage mission
+      const missionConfig = {
+        area_width: parseFloat(scanConfig.scanArea.split(' ')[0]) || 5.0,
+        area_height: parseFloat(scanConfig.scanArea.split(' ')[2]) || 5.0,
+        row_spacing: 0.8,
+        waypoint_spacing: 0.5,
+        origin_x: 0.0,
+        origin_y: 0.0,
+        dwell_time: 2.0,
+        waypoint_timeout: 30.0
+      }
+
+      const response = await apiClient.startCoverageMission(missionConfig)
+      console.log('Mission started:', response)
+
+      setIsScanning(true)
+      setIsPaused(false)
+      setScanProgress(0)
+      setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
+
+      // Poll mission status to track progress
+      const statusInterval = setInterval(async () => {
+        try {
+          const status = await apiClient.getMissionStatus()
+          if (status.running) {
+            // Mission still running - could subscribe to /coverage/progress topic via websocket
+            // For now, use simulated progress
+          } else {
+            clearInterval(statusInterval)
+            if (status.status === 'completed') {
+              setScanProgress(100)
+              setIsScanning(false)
+              setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
+            }
+          }
+        } catch (error) {
+          console.error('Failed to check mission status:', error)
+        }
+      }, 2000)
+
+    } catch (error) {
+      console.error('Failed to start coverage mission:', error)
+      alert(`Failed to start mission: ${error.message}`)
+    }
   }
 
   const handlePauseScan = () => {
@@ -345,7 +386,16 @@ function App() {
     setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
   }
 
-  const handleStopScan = () => {
+  const handleStopScan = async () => {
+    try {
+      // Stop the actual ROS coverage mission
+      const response = await apiClient.stopCoverageMission()
+      console.log('Mission stopped:', response)
+    } catch (error) {
+      console.error('Failed to stop mission:', error)
+      // Continue with UI update even if API call fails
+    }
+
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current)
     }

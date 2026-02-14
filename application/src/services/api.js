@@ -96,6 +96,24 @@ class ApiClient {
       body: JSON.stringify(statusData)
     });
   }
+
+  // Mission Control
+  async startCoverageMission(config = {}) {
+    return this.request('/robot/mission/start', {
+      method: 'POST',
+      body: JSON.stringify(config)
+    });
+  }
+
+  async stopCoverageMission() {
+    return this.request('/robot/mission/stop', {
+      method: 'POST'
+    });
+  }
+
+  async getMissionStatus() {
+    return this.request('/robot/mission/status');
+  }
 }
 
 // Export singleton instance

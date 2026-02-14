@@ -6,8 +6,15 @@ from app.models.robot import RobotStatus
 from app.schemas.robot import RobotStatusCreate, RobotStatusResponse
 from app.schemas.response import RobotStatusResponse as RobotStatusCreateResponse
 from app.utils.validators import validate_operating_state
+import subprocess
+import os
+import signal
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/robot", tags=["Robot Status"])
+
+# Store active mission process
+mission_process = None
 
 
 @router.post("/status", response_model=RobotStatusCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -65,3 +72,133 @@ async def get_robot_status(robot_id: str, db: Session = Depends(get_db)):
         longitude=float(status.longitude) if status.longitude else None,
         recorded_at=status.recorded_at
     )
+
+
+class MissionConfig(BaseModel):
+    area_width: float = 5.0
+    area_height: float = 5.0
+    row_spacing: float = 0.8
+    waypoint_spacing: float = 0.5
+    origin_x: float = 0.0
+    origin_y: float = 0.0
+    dwell_time: float = 2.0
+    waypoint_timeout: float = 30.0
+
+
+@router.post("/mission/start")
+async def start_coverage_mission(config: MissionConfig = None):
+    """Start the lawnmower coverage mission"""
+    global mission_process
+
+    if mission_process is not None and mission_process.poll() is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Mission already running"
+        )
+
+    try:
+        # Source ROS environment and launch coverage mission
+        # Build roslaunch command with parameters
+        cmd = [
+            'bash', '-c',
+            f'source ~/Dev/pyroscope/catkin_ws/devel/setup.bash && '
+            f'roslaunch pyroscope_navigation coverage_mission.launch '
+            f'area_width:={config.area_width if config else 5.0} '
+            f'area_height:={config.area_height if config else 5.0} '
+            f'row_spacing:={config.row_spacing if config else 0.8} '
+            f'waypoint_spacing:={config.waypoint_spacing if config else 0.5} '
+            f'origin_x:={config.origin_x if config else 0.0} '
+            f'origin_y:={config.origin_y if config else 0.0} '
+            f'dwell_time:={config.dwell_time if config else 2.0} '
+            f'waypoint_timeout:={config.waypoint_timeout if config else 30.0}'
+        ]
+
+        # Start the mission as a background process
+        mission_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=os.setsid  # Create new process group
+        )
+
+        return {
+            "status": "started",
+            "message": "Coverage mission started successfully",
+            "pid": mission_process.pid,
+            "config": config.dict() if config else {}
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start mission: {str(e)}"
+        )
+
+
+@router.post("/mission/stop")
+async def stop_coverage_mission():
+    """Stop the running coverage mission"""
+    global mission_process
+
+    if mission_process is None or mission_process.poll() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No mission is currently running"
+        )
+
+    try:
+        # Kill the entire process group
+        os.killpg(os.getpgid(mission_process.pid), signal.SIGTERM)
+
+        # Wait for process to terminate
+        mission_process.wait(timeout=5)
+        mission_process = None
+
+        return {
+            "status": "stopped",
+            "message": "Coverage mission stopped successfully"
+        }
+
+    except subprocess.TimeoutExpired:
+        # Force kill if it doesn't stop gracefully
+        os.killpg(os.getpgid(mission_process.pid), signal.SIGKILL)
+        mission_process = None
+        return {
+            "status": "force_stopped",
+            "message": "Coverage mission force stopped"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to stop mission: {str(e)}"
+        )
+
+
+@router.get("/mission/status")
+async def get_mission_status():
+    """Get the current status of the coverage mission"""
+    global mission_process
+
+    if mission_process is None:
+        return {
+            "status": "idle",
+            "running": False,
+            "message": "No mission has been started"
+        }
+
+    if mission_process.poll() is None:
+        return {
+            "status": "running",
+            "running": True,
+            "pid": mission_process.pid,
+            "message": "Mission is currently running"
+        }
+    else:
+        return_code = mission_process.returncode
+        mission_process = None
+        return {
+            "status": "completed" if return_code == 0 else "failed",
+            "running": False,
+            "return_code": return_code,
+            "message": f"Mission completed with return code {return_code}"
+        }
