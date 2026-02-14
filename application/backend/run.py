@@ -18,7 +18,7 @@ if __name__ == "__main__":
     
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",  # Listen on all interfaces for remote access
+        host="10.18.70.16",  # Listen on all interfaces for remote access
         port=8000,
         reload=True,
         reload_dirs=["app"]
