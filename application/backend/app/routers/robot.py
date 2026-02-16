@@ -26,7 +26,7 @@ async def update_robot_status(
     # Validate operating state
     if status_data.operating_state:
         status_data.operating_state = validate_operating_state(status_data.operating_state)
-    
+
     robot_status = RobotStatus(
         robot_id=status_data.robot_id,
         battery_level=status_data.battery_level,
@@ -37,43 +37,15 @@ async def update_robot_status(
         latitude=status_data.latitude,
         longitude=status_data.longitude
     )
-    
+
     db.add(robot_status)
     db.commit()
     db.refresh(robot_status)
-    
+
     return RobotStatusCreateResponse(status_id=robot_status.id)
 
 
-@router.get("/{robot_id}/status", response_model=RobotStatusResponse)
-async def get_robot_status(robot_id: str, db: Session = Depends(get_db)):
-    """Get latest robot status"""
-    robot_status = (
-        db.query(RobotStatus)
-        .filter(RobotStatus.robot_id == robot_id)
-        .order_by(desc(RobotStatus.recorded_at))
-        .first()
-    )
-    
-    if not robot_status:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Robot status not found"
-        )
-
-    return RobotStatusResponse(
-        robot_id=robot_status.robot_id,
-        battery_level=robot_status.battery_level,
-        storage_used=float(robot_status.storage_used) if robot_status.storage_used else None,
-        storage_total=float(robot_status.storage_total) if robot_status.storage_total else None,
-        signal_strength=robot_status.signal_strength,
-        operating_state=robot_status.operating_state,
-        latitude=float(robot_status.latitude) if robot_status.latitude else None,
-        longitude=float(robot_status.longitude) if robot_status.longitude else None,
-        recorded_at=robot_status.recorded_at
-    )
-
-
+# Mission Config and Endpoints - MUST come before /{robot_id}/status route
 class MissionConfig(BaseModel):
     area_width: float = 5.0
     area_height: float = 5.0
@@ -202,3 +174,33 @@ async def get_mission_status():
             "return_code": return_code,
             "message": f"Mission completed with return code {return_code}"
         }
+
+
+# Robot Status Endpoint - MUST come AFTER mission endpoints to avoid route conflicts
+@router.get("/{robot_id}/status", response_model=RobotStatusResponse)
+async def get_robot_status(robot_id: str, db: Session = Depends(get_db)):
+    """Get latest robot status"""
+    robot_status = (
+        db.query(RobotStatus)
+        .filter(RobotStatus.robot_id == robot_id)
+        .order_by(desc(RobotStatus.recorded_at))
+        .first()
+    )
+
+    if not robot_status:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Robot status not found"
+        )
+
+    return RobotStatusResponse(
+        robot_id=robot_status.robot_id,
+        battery_level=robot_status.battery_level,
+        storage_used=float(robot_status.storage_used) if robot_status.storage_used else None,
+        storage_total=float(robot_status.storage_total) if robot_status.storage_total else None,
+        signal_strength=robot_status.signal_strength,
+        operating_state=robot_status.operating_state,
+        latitude=float(robot_status.latitude) if robot_status.latitude else None,
+        longitude=float(robot_status.longitude) if robot_status.longitude else None,
+        recorded_at=robot_status.recorded_at
+    )
