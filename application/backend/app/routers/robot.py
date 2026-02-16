@@ -48,29 +48,29 @@ async def update_robot_status(
 @router.get("/{robot_id}/status", response_model=RobotStatusResponse)
 async def get_robot_status(robot_id: str, db: Session = Depends(get_db)):
     """Get latest robot status"""
-    status = (
+    robot_status = (
         db.query(RobotStatus)
         .filter(RobotStatus.robot_id == robot_id)
         .order_by(desc(RobotStatus.recorded_at))
         .first()
     )
     
-    if not status:
+    if not robot_status:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Robot status not found"
         )
-    
+
     return RobotStatusResponse(
-        robot_id=status.robot_id,
-        battery_level=status.battery_level,
-        storage_used=float(status.storage_used) if status.storage_used else None,
-        storage_total=float(status.storage_total) if status.storage_total else None,
-        signal_strength=status.signal_strength,
-        operating_state=status.operating_state,
-        latitude=float(status.latitude) if status.latitude else None,
-        longitude=float(status.longitude) if status.longitude else None,
-        recorded_at=status.recorded_at
+        robot_id=robot_status.robot_id,
+        battery_level=robot_status.battery_level,
+        storage_used=float(robot_status.storage_used) if robot_status.storage_used else None,
+        storage_total=float(robot_status.storage_total) if robot_status.storage_total else None,
+        signal_strength=robot_status.signal_strength,
+        operating_state=robot_status.operating_state,
+        latitude=float(robot_status.latitude) if robot_status.latitude else None,
+        longitude=float(robot_status.longitude) if robot_status.longitude else None,
+        recorded_at=robot_status.recorded_at
     )
 
 

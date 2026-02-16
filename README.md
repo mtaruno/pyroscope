@@ -124,6 +124,8 @@ With SDK installed:
 ### Backend
 
 Instructions for setting up the backend:
+1. Install MySQL (using MySQL 8.0 for Ubuntu 18.04)
+2. ...
 
 
 ### Perception
