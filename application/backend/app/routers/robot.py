@@ -73,7 +73,6 @@ async def start_coverage_mission(config: MissionConfig = None):
         # Build roslaunch command with parameters
         cmd = [
             'bash', '-c',
-            f'source ~/Dev/pyroscope/catkin_ws/devel/setup.bash && '
             f'roslaunch pyroscope_navigation coverage_mission.launch '
             f'area_width:={config.area_width if config else 5.0} '
             f'area_height:={config.area_height if config else 5.0} '
@@ -86,13 +85,9 @@ async def start_coverage_mission(config: MissionConfig = None):
         ]
 
         # Start the mission as a background process
-        # Log to file so we can debug launch failures
-        log_path = os.path.expanduser("~/mission_output.log")
-        log_file = open(log_path, "w")
+        # stdout/stderr go to the backend terminal for real-time logs
         mission_process = subprocess.Popen(
             cmd,
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
             preexec_fn=os.setsid  # Create new process group
         )
 
