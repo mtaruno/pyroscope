@@ -95,7 +95,6 @@ async def start_coverage_mission(config: MissionConfig = None):
             "status": "started",
             "message": "Coverage mission started successfully",
             "pid": mission_process.pid,
-            "log_file": log_path,
             "config": config.dict() if config else {}
         }
 
