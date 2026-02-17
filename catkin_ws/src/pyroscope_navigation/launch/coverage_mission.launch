@@ -1,4 +1,14 @@
 <launch>
+    <!-- Coverage planner arguments (can be passed from backend or command line) -->
+    <arg name="area_width" default="10.0"/>
+    <arg name="area_height" default="10.0"/>
+    <arg name="row_spacing" default="1.0"/>
+    <arg name="waypoint_spacing" default="1.0"/>
+    <arg name="origin_x" default="0.0"/>
+    <arg name="origin_y" default="0.0"/>
+    <arg name="dwell_time" default="3.0"/>
+    <arg name="waypoint_timeout" default="30.0"/>
+
     <!-- Waypoint controller (drives to individual waypoints) -->
     <node pkg="pyroscope_navigation" type="waypoint_controller.py" name="waypoint_controller" output="screen">
         <param name="goal_tolerance" value="0.5"/>
@@ -19,13 +29,13 @@
 
     <!-- Coverage planner (lawnmower pattern) -->
     <node pkg="pyroscope_navigation" type="coverage_planner.py" name="coverage_planner" output="screen">
-        <param name="area_width" value="10.0"/>
-        <param name="area_height" value="10.0"/>
-        <param name="row_spacing" value="1.0"/>
-        <param name="waypoint_spacing" value="1.0"/>
-        <param name="origin_x" value="0.0"/>
-        <param name="origin_y" value="0.0"/>
-        <param name="dwell_time" value="3.0"/>
-        <param name="waypoint_timeout" value="30.0"/>
+        <param name="area_width" value="$(arg area_width)"/>
+        <param name="area_height" value="$(arg area_height)"/>
+        <param name="row_spacing" value="$(arg row_spacing)"/>
+        <param name="waypoint_spacing" value="$(arg waypoint_spacing)"/>
+        <param name="origin_x" value="$(arg origin_x)"/>
+        <param name="origin_y" value="$(arg origin_y)"/>
+        <param name="dwell_time" value="$(arg dwell_time)"/>
+        <param name="waypoint_timeout" value="$(arg waypoint_timeout)"/>
     </node>
 </launch>

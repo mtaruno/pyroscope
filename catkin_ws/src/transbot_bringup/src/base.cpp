@@ -12,11 +12,12 @@ RobotBase::RobotBase() :
         vel_dt_(0),
         x_pos_(0),
         y_pos_(0),
-        heading_(0) {
+        heading_(0),
+        linear_scale_(1.0) {
     ros::NodeHandle nh_private("~");
     odom_publisher_ = nh_.advertise<nav_msgs::Odometry>("odom_raw", 50);
     velocity_subscriber_ = nh_.subscribe("/transbot/get_vel", 50, &RobotBase::velCallback, this);
-    nh_private.getParam("linear_scale", linear_scale_);
+    nh_private.param<float>("linear_scale", linear_scale_, 1.0);
     nh_private.getParam("is_namespace", namespace_);
     nh_private.param<bool>("is_multi_robot", is_multi_robot_,false);
     str1 = namespace_;
@@ -25,6 +26,10 @@ RobotBase::RobotBase() :
 void RobotBase::velCallback(const geometry_msgs::Twist twist) {
 //    ROS_INFO("ODOM PUBLISH %.2f,%.2f,%.2f", twist.linear.x, twist.linear.y, twist.angular.z);
     ros::Time current_time = ros::Time::now();
+    if (last_vel_time_.toSec() == 0) {
+        last_vel_time_ = current_time;
+        return;
+    }
     linear_velocity_x_ = twist.linear.x * linear_scale_;
     linear_velocity_y_ = twist.linear.y * linear_scale_;
     angular_velocity_z_ = twist.angular.z;

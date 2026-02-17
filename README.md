@@ -71,6 +71,23 @@ Monitoring:
 10. rostopic hz /scan
 11. rosrun tf view_frames && evince frames.pdf
 
+rosrun tf static_transform_publisher 0 0 0.15 0 0 0 base_link laser 100 &
+
+rosrun tf tf_monitor
+
+Make sure odometry is working:
+# Terminal 1: Start teleop keyboard
+roslaunch transbot_ctrl transbot_keyboard.launch
+
+# Terminal 2: Watch X position
+rostopic echo /odom --filter "print('x:', m.pose.pose.position.x, '  y:', m.pose.pose.position.y)"
+
+# Drive forward with keyboard (W key or up arrow)
+# Watch the terminal
+
+Expected behavior:
+- ✅ X value increases as you drive forward → Odometry works!
+- ❌ X value stays at 0.0 → Odometry broken!
 
 #### Obstacle Avoidance (two layers)
 - **Lidar obstacle detector** — monitors the front ±30° arc of the RPLidar scan. Publishes `/obstacle_detected` when anything is within 0.30m
@@ -127,6 +144,24 @@ Instructions for setting up the backend:
 1. Install MySQL (using MySQL 8.0 for Ubuntu 18.04)
 2. ...
 
+To test from the backend:
+                                                                                  
+1. Start the backend                                                             
+  cd /Users/matthewtaruno/Dev/pyroscope/application/backend
+  python run.py
+
+2. Start a mission via API
+  curl -X POST http://localhost:8000/api/robot/mission/start \
+    -H "Content-Type: application/json" \
+    -d '{"area_width": 10.0, "area_height": 10.0, "row_spacing": 1.0,
+  "waypoint_spacing": 1.0}'
+
+3. Check status
+  curl http://localhost:8000/api/robot/mission/status
+
+4. Stop mission
+  curl -X POST http://localhost:8000/api/robot/mission/stop
+
 
 ### Perception
 Percetion is led by Chenghao Wang. The perception system is responsible for taking downward-facing images of the fuel plots and estimating the surface fuel loads from these images.
@@ -139,3 +174,5 @@ This is led by Annika An. She designed the hardware for the robot, putting toget
   - Plots that have (a) QC-passed images, (b) model fuel estimates, and (c) appear on a unit dashboard actually used by the planner.
   - Baseline (manual): ~14 plots/day.
   - MVP target (robot): ≥30 plots/day.
+
+
