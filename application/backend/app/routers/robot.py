@@ -73,6 +73,7 @@ async def start_coverage_mission(config: MissionConfig = None):
         # Build roslaunch command with parameters
         cmd = [
             'bash', '-c',
+            f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
             f'roslaunch pyroscope_navigation coverage_mission.launch '
             f'area_width:={config.area_width if config else 5.0} '
             f'area_height:={config.area_height if config else 5.0} '
