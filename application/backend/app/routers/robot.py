@@ -86,10 +86,13 @@ async def start_coverage_mission(config: MissionConfig = None):
         ]
 
         # Start the mission as a background process
+        # Log to file so we can debug launch failures
+        log_path = os.path.expanduser("~/mission_output.log")
+        log_file = open(log_path, "w")
         mission_process = subprocess.Popen(
             cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=log_file,
+            stderr=subprocess.STDOUT,
             preexec_fn=os.setsid  # Create new process group
         )
 
@@ -97,6 +100,7 @@ async def start_coverage_mission(config: MissionConfig = None):
             "status": "started",
             "message": "Coverage mission started successfully",
             "pid": mission_process.pid,
+            "log_file": log_path,
             "config": config.dict() if config else {}
         }
 
