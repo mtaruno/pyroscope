@@ -71,11 +71,10 @@ async def start_coverage_mission(config: MissionConfig = None):
     try:
         # Source ROS environment and launch coverage mission
         # Build roslaunch command with parameters
-        cmd = [
-            'bash', '-c',
-            f'unset VIRTUAL_ENV && unset CONDA_DEFAULT_ENV && unset PYTHONHOME && '
-            f'export PYTHONPATH=/usr/lib/python2.7/dist-packages && '
-            f'export PATH=/usr/bin:/usr/sbin:/bin:/sbin && '
+        # Build roslaunch command
+        # Use env -i to start with a clean environment, preventing
+        # Python 3.9 venv from leaking into the ROS subprocess
+        ros_cmd = (
             f'source /opt/ros/melodic/setup.bash && '
             f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
             f'roslaunch pyroscope_navigation coverage_mission.launch '
@@ -87,6 +86,13 @@ async def start_coverage_mission(config: MissionConfig = None):
             f'origin_y:={config.origin_y if config else 0.0} '
             f'dwell_time:={config.dwell_time if config else 2.0} '
             f'waypoint_timeout:={config.waypoint_timeout if config else 30.0}'
+        )
+        cmd = [
+            'env', '-i',
+            f'HOME={os.environ.get("HOME", "/root")}',
+            f'USER={os.environ.get("USER", "root")}',
+            'PATH=/usr/bin:/usr/sbin:/bin:/sbin',
+            'bash', '-c', ros_cmd
         ]
 
         # Start the mission as a background process
