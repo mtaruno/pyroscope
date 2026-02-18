@@ -75,6 +75,8 @@ async def start_coverage_mission(config: MissionConfig = None):
         # Use env -i to start with a clean environment, preventing
         # Python 3.9 venv from leaking into the ROS subprocess
         ros_cmd = (
+            f'mkdir -p /tmp/ros_py_bin && ln -sf /usr/bin/python2.7 /tmp/ros_py_bin/python && '
+            f'export PATH=/tmp/ros_py_bin:$PATH && '
             f'source /opt/ros/melodic/setup.bash && '
             f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
             f'roslaunch pyroscope_navigation coverage_mission.launch '
@@ -92,7 +94,6 @@ async def start_coverage_mission(config: MissionConfig = None):
             f'HOME={os.environ.get("HOME", "/root")}',
             f'USER={os.environ.get("USER", "root")}',
             'PATH=/usr/bin:/usr/sbin:/bin:/sbin',
-            'PYTHONPATH=/usr/lib/python2.7/dist-packages',
             'bash', '-c', ros_cmd
         ]
 
