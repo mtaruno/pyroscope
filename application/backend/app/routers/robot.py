@@ -77,6 +77,7 @@ async def start_coverage_mission(config: MissionConfig = None):
         ros_cmd = (
             f'mkdir -p /tmp/ros_py_bin && ln -sf /usr/bin/python2.7 /tmp/ros_py_bin/python && '
             f'export PATH=/tmp/ros_py_bin:$PATH && '
+            f'export PYTHONPATH=/usr/lib/python2.7/dist-packages && '
             f'source /opt/ros/melodic/setup.bash && '
             f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
             f'roslaunch pyroscope_navigation coverage_mission.launch '
