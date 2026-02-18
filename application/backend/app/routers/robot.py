@@ -77,6 +77,7 @@ async def start_coverage_mission(config: MissionConfig = None):
         ros_cmd = (
             f'source /opt/ros/melodic/setup.bash && '
             f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
+            f'export PYTHONPATH=$PYTHONPATH:/usr/lib/python2.7/dist-packages && '
             f'/usr/bin/python2.7 /opt/ros/melodic/bin/roslaunch pyroscope_navigation coverage_mission.launch '
             f'area_width:={config.area_width if config else 5.0} '
             f'area_height:={config.area_height if config else 5.0} '
