@@ -92,6 +92,7 @@ async def start_coverage_mission(config: MissionConfig = None):
             f'HOME={os.environ.get("HOME", "/root")}',
             f'USER={os.environ.get("USER", "root")}',
             'PATH=/usr/bin:/usr/sbin:/bin:/sbin',
+            'PYTHONPATH=/usr/lib/python2.7/dist-packages',
             'bash', '-c', ros_cmd
         ]
 
