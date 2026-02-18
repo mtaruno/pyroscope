@@ -69,16 +69,22 @@ async def start_coverage_mission(config: MissionConfig = None):
         )
 
     try:
-        # Source ROS environment and launch coverage mission
-        # Build roslaunch command with parameters
-        # Build roslaunch command
-        # Use env -i to start with a clean environment, preventing
-        # Python 3.9 venv from leaking into the ROS subprocess
+        # Build a clean env that removes the Python 3.9 venv but
+        # keeps the normal system environment intact for ROS
+        clean_env = {
+            k: v for k, v in os.environ.items()
+            if k not in ('VIRTUAL_ENV', 'PYTHONHOME', 'PYTHONPATH', 'CONDA_DEFAULT_ENV')
+        }
+        # Remove venv bin directory from PATH
+        clean_env['PATH'] = ':'.join(
+            p for p in clean_env.get('PATH', '').split(':')
+            if 'venv' not in p
+        )
+
         ros_cmd = (
             f'source /opt/ros/melodic/setup.bash && '
             f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
-            f'export PYTHONPATH=$PYTHONPATH:/usr/lib/python2.7/dist-packages && '
-            f'/usr/bin/python2.7 /opt/ros/melodic/bin/roslaunch pyroscope_navigation coverage_mission.launch '
+            f'roslaunch pyroscope_navigation coverage_mission.launch '
             f'area_width:={config.area_width if config else 5.0} '
             f'area_height:={config.area_height if config else 5.0} '
             f'row_spacing:={config.row_spacing if config else 0.8} '
@@ -88,18 +94,12 @@ async def start_coverage_mission(config: MissionConfig = None):
             f'dwell_time:={config.dwell_time if config else 2.0} '
             f'waypoint_timeout:={config.waypoint_timeout if config else 30.0}'
         )
-        cmd = [
-            'env', '-i',
-            f'HOME={os.environ.get("HOME", "/root")}',
-            f'USER={os.environ.get("USER", "root")}',
-            'PATH=/usr/bin:/usr/sbin:/bin:/sbin',
-            'bash', '-c', ros_cmd
-        ]
+        cmd = ['bash', '-c', ros_cmd]
 
         # Start the mission as a background process
-        # stdout/stderr go to the backend terminal for real-time logs
         mission_process = subprocess.Popen(
             cmd,
+            env=clean_env,
             preexec_fn=os.setsid  # Create new process group
         )
 
