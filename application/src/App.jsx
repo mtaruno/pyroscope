@@ -66,7 +66,7 @@ function App() {
       try {
         // Try to load scans - works with or without authentication
         const response = await apiClient.getScans({ limit: 50 }).catch(() => ({ total: 0, scans: [] }))
-        
+
         if (response && response.scans) {
           // Transform API data to map markers format
           const markers = response.scans.map(scan => ({
@@ -97,7 +97,7 @@ function App() {
             }
           }))
           setMapMarkers(markers)
-          
+
           // Transform for data log table
           const logs = response.scans.map(scan => ({
             id: scan.id,
@@ -107,12 +107,12 @@ function App() {
             avgAirTemp: scan.avg_air_temp || 0,
             avgHumidity: scan.avg_humidity || 0,
             avgPlantTemp: scan.avg_plant_temp || 0,
-            fuelLoad: scan.fuel_load || 'Unknown'
+            fuelLoad: (scan.fuel_load !== null && scan.fuel_load !== undefined) ? parseFloat(scan.fuel_load) : null
           }))
           setScanLogs(logs)
-          
-          // Update scan history for sidebar
-          const history = response.scans.slice(0, 5).map(scan => ({
+
+          // Update scan history for sidebar - show all scans
+          const history = response.scans.map(scan => ({
             id: scan.id,
             zone: `Area ${scan.zone_id}`,  // 使用 zone_id 生成显示名称
             date: scan.completed_at ? new Date(scan.completed_at).toLocaleDateString('en-GB').replace(/\//g, '.') : 'N/A',
@@ -130,12 +130,12 @@ function App() {
         setIsLoadingScans(false)
       }
     }
-    
+
     loadScans()
-    
+
     // Poll for new scans every 10 seconds
     const pollInterval = setInterval(loadScans, 10000)
-    
+
     return () => clearInterval(pollInterval)
   }, [])
 
@@ -149,10 +149,10 @@ function App() {
           storageUsed: status.storage_used || 0,
           storageTotal: status.storage_total || 8,
           signalStrength: status.signal_strength || 'Good',
-          operatingState: status.operating_state ? 
+          operatingState: status.operating_state ?
             status.operating_state.charAt(0).toUpperCase() + status.operating_state.slice(1) : 'Idle'
         })
-        
+
         // Update location if available
         if (status.latitude && status.longitude) {
           setLocationData(prev => ({
@@ -166,10 +166,10 @@ function App() {
         console.log('Robot status not available:', error.message)
       }
     }
-    
+
     pollRobotStatus()
     const statusInterval = setInterval(pollRobotStatus, 5000)
-    
+
     return () => clearInterval(statusInterval)
   }, [])
 
@@ -179,11 +179,11 @@ function App() {
       if (scanProgress === 0) {
         setScanPhase('Initializing...')
       }
-      
+
       scanIntervalRef.current = setInterval(() => {
         setScanProgress(prev => {
           const newProgress = prev + Math.random() * 2 + 0.5
-          
+
           // Update phase based on progress
           if (newProgress < 10) {
             setScanPhase('Initializing sensors...')
@@ -202,13 +202,13 @@ function App() {
           } else {
             setScanPhase('Finalizing report...')
           }
-          
+
           if (newProgress >= 100) {
             clearInterval(scanIntervalRef.current)
             setIsScanning(false)
             setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
             setScanPhase('Scan complete!')
-            
+
             // Generate scan results and upload to backend
             setTimeout(async () => {
               const now = new Date()
@@ -217,13 +217,13 @@ function App() {
                 location: locationData.zoneName,
                 areaSize: scanConfig.scanArea,
                 duration: '15 min 32 sec',
-                completedAt: now.toLocaleDateString('en-GB', { 
-                  day: '2-digit', 
-                  month: 'short', 
-                  year: 'numeric' 
-                }) + ' ' + now.toLocaleTimeString('en-GB', { 
-                  hour: '2-digit', 
-                  minute: '2-digit' 
+                completedAt: now.toLocaleDateString('en-GB', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric'
+                }) + ' ' + now.toLocaleTimeString('en-GB', {
+                  hour: '2-digit',
+                  minute: '2-digit'
                 }),
                 riskLevel: 'High',
                 avgPlantTemp: 33.0,
@@ -240,83 +240,83 @@ function App() {
                 latitude: scanTarget.lat.toFixed(6),
                 longitude: scanTarget.lng.toFixed(6)
               }
-              
+
               // Upload scan to backend
               try {
-                  const uploadData = {
-                    zone_id: scanData.zoneId,
-                    latitude: scanTarget.lat,
-                    longitude: scanTarget.lng,
-                    gps_accuracy: locationData.gpsAccuracy,
-                    scan_area: scanData.areaSize,
-                    duration: scanData.duration,
-                    risk_level: scanData.riskLevel.toLowerCase(),
-                    avg_plant_temp: scanData.avgPlantTemp,
-                    avg_air_temp: scanData.avgAirTemp,
-                    avg_humidity: environmentalData.airHumidity,
-                    wind_speed: environmentalData.windSpeed,
-                    temp_diff: scanData.tempDiff,
-                    fuel_load: scanData.fuelLoad,
-                    fuel_density: scanData.fuelDensity,
-                    biomass: scanData.biomass,
-                    robot_id: 'ROBOT-001',
-                    completed_at: now.toISOString()
-                  }
-                  
-                  const response = await apiClient.createScan(uploadData)
-                  console.log('Scan uploaded successfully:', response)
-                  
-                  // Reload scans to show the new one
-                  setTimeout(() => {
-                    // Trigger a reload by calling the API
-                    apiClient.getScans({ limit: 50 }).then(response => {
-                      if (response && response.scans) {
-                        const markers = response.scans.map(scan => ({
-                          id: scan.id,
-                          lat: scan.latitude,
-                          lng: scan.longitude,
-                          riskLevel: scan.risk_level || 'medium',
-                            scanData: {
-                            zoneId: scan.zone_id || 'Unknown',
-                            location: `Area ${scan.zone_id}`,
-                            areaSize: scan.scan_area || '50 m × 50 m',
-                            duration: scan.duration || 'N/A',
-                            completedAt: scan.completed_at ? new Date(scan.completed_at).toLocaleString() : 'N/A',
-                            riskLevel: scan.risk_level ? scan.risk_level.charAt(0).toUpperCase() + scan.risk_level.slice(1) : 'Medium',
-                            avgPlantTemp: scan.avg_plant_temp || 0,
-                            avgAirTemp: scan.avg_air_temp || 0,
-                            tempDiff: scan.temp_diff || 0,
-                            fuelLoad: scan.fuel_load || 'Unknown',
-                            fuelDensity: scan.fuel_density || 0,
-                            biomass: scan.biomass || 0,
-                            recommendations: [
-                              'View detailed analysis',
-                              'Check environmental data',
-                              'Review scan images'
-                            ],
-                            latitude: scan.latitude.toFixed(6),
-                            longitude: scan.longitude.toFixed(6)
-                          }
-                        }))
-                        setMapMarkers(markers)
-                      }
-                    }).catch(err => console.error('Failed to reload scans:', err))
-                  }, 2000)
-                } catch (error) {
-                  console.error('Failed to upload scan:', error)
+                const uploadData = {
+                  zone_id: scanData.zoneId,
+                  latitude: scanTarget.lat,
+                  longitude: scanTarget.lng,
+                  gps_accuracy: locationData.gpsAccuracy,
+                  scan_area: scanData.areaSize,
+                  duration: scanData.duration,
+                  risk_level: scanData.riskLevel.toLowerCase(),
+                  avg_plant_temp: scanData.avgPlantTemp,
+                  avg_air_temp: scanData.avgAirTemp,
+                  avg_humidity: environmentalData.airHumidity,
+                  wind_speed: environmentalData.windSpeed,
+                  temp_diff: scanData.tempDiff,
+                  fuel_load: scanData.fuelLoad,
+                  fuel_density: scanData.fuelDensity,
+                  biomass: scanData.biomass,
+                  robot_id: 'ROBOT-001',
+                  completed_at: now.toISOString()
                 }
-              
+
+                const response = await apiClient.createScan(uploadData)
+                console.log('Scan uploaded successfully:', response)
+
+                // Reload scans to show the new one
+                setTimeout(() => {
+                  // Trigger a reload by calling the API
+                  apiClient.getScans({ limit: 50 }).then(response => {
+                    if (response && response.scans) {
+                      const markers = response.scans.map(scan => ({
+                        id: scan.id,
+                        lat: scan.latitude,
+                        lng: scan.longitude,
+                        riskLevel: scan.risk_level || 'medium',
+                        scanData: {
+                          zoneId: scan.zone_id || 'Unknown',
+                          location: `Area ${scan.zone_id}`,
+                          areaSize: scan.scan_area || '50 m × 50 m',
+                          duration: scan.duration || 'N/A',
+                          completedAt: scan.completed_at ? new Date(scan.completed_at).toLocaleString() : 'N/A',
+                          riskLevel: scan.risk_level ? scan.risk_level.charAt(0).toUpperCase() + scan.risk_level.slice(1) : 'Medium',
+                          avgPlantTemp: scan.avg_plant_temp || 0,
+                          avgAirTemp: scan.avg_air_temp || 0,
+                          tempDiff: scan.temp_diff || 0,
+                          fuelLoad: scan.fuel_load || 'Unknown',
+                          fuelDensity: scan.fuel_density || 0,
+                          biomass: scan.biomass || 0,
+                          recommendations: [
+                            'View detailed analysis',
+                            'Check environmental data',
+                            'Review scan images'
+                          ],
+                          latitude: scan.latitude.toFixed(6),
+                          longitude: scan.longitude.toFixed(6)
+                        }
+                      }))
+                      setMapMarkers(markers)
+                    }
+                  }).catch(err => console.error('Failed to reload scans:', err))
+                }, 2000)
+              } catch (error) {
+                console.error('Failed to upload scan:', error)
+              }
+
               setScanResultData(scanData)
               setShowResults(true)
             }, 1000)
-            
+
             return 100
           }
           return newProgress
         })
       }, 500)
     }
-    
+
     return () => {
       if (scanIntervalRef.current) {
         clearInterval(scanIntervalRef.current)
@@ -324,52 +324,11 @@ function App() {
     }
   }, [isScanning, isPaused])
 
-  const handleStartScan = async () => {
-    try {
-      // Start the actual ROS coverage mission
-      const missionConfig = {
-        area_width: parseFloat(scanConfig.scanArea.split(' ')[0]) || 5.0,
-        area_height: parseFloat(scanConfig.scanArea.split(' ')[2]) || 5.0,
-        row_spacing: 0.8,
-        waypoint_spacing: 0.5,
-        origin_x: 0.0,
-        origin_y: 0.0,
-        dwell_time: 2.0,
-        waypoint_timeout: 30.0
-      }
-
-      const response = await apiClient.startCoverageMission(missionConfig)
-      console.log('Mission started:', response)
-
-      setIsScanning(true)
-      setIsPaused(false)
-      setScanProgress(0)
-      setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
-
-      // Poll mission status to track progress
-      const statusInterval = setInterval(async () => {
-        try {
-          const status = await apiClient.getMissionStatus()
-          if (status.running) {
-            // Mission still running - could subscribe to /coverage/progress topic via websocket
-            // For now, use simulated progress
-          } else {
-            clearInterval(statusInterval)
-            if (status.status === 'completed') {
-              setScanProgress(100)
-              setIsScanning(false)
-              setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
-            }
-          }
-        } catch (error) {
-          console.error('Failed to check mission status:', error)
-        }
-      }, 2000)
-
-    } catch (error) {
-      console.error('Failed to start coverage mission:', error)
-      alert(`Failed to start mission: ${error.message}`)
-    }
+  const handleStartScan = () => {
+    setIsScanning(true)
+    setIsPaused(false)
+    setScanProgress(0)
+    setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
   }
 
   const handlePauseScan = () => {
@@ -386,16 +345,7 @@ function App() {
     setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
   }
 
-  const handleStopScan = async () => {
-    try {
-      // Stop the actual ROS coverage mission
-      const response = await apiClient.stopCoverageMission()
-      console.log('Mission stopped:', response)
-    } catch (error) {
-      console.error('Failed to stop mission:', error)
-      // Continue with UI update even if API call fails
-    }
-
+  const handleStopScan = () => {
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current)
     }
@@ -404,6 +354,12 @@ function App() {
     setScanProgress(0)
     setScanPhase('')
     setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
+  }
+
+  // Handle boundary update when location is refreshed
+  const handleUpdateBoundary = (newLat, newLng) => {
+    // Update scan target to new location
+    setScanTarget({ lat: newLat, lng: newLng })
   }
 
   const handleScanTargetChange = (newTarget) => {
@@ -421,10 +377,11 @@ function App() {
     try {
       // Try to load detailed scan data from API
       const scanDetail = await apiClient.getScanDetail(marker.id).catch(() => null)
-      
+
       if (scanDetail) {
         // Transform API response to scan data format
         const detailedScanData = {
+          id: scanDetail.id,  // Add scan ID for heatmap
           zoneId: scanDetail.zone_id || 'Unknown',
           location: `Area ${scanDetail.zone_id}`,
           areaSize: scanDetail.scan_area || '50 m × 50 m',
@@ -434,7 +391,12 @@ function App() {
           avgPlantTemp: scanDetail.avg_plant_temp || 0,
           avgAirTemp: scanDetail.avg_air_temp || 0,
           tempDiff: scanDetail.temp_diff || 0,
-          fuelLoad: scanDetail.fuel_load || 'Unknown',
+          fuel_load: scanDetail.fuel_load,  // Use new field name
+          one_hour_fuel: scanDetail.one_hour_fuel,
+          ten_hour_fuel: scanDetail.ten_hour_fuel,
+          hundred_hour_fuel: scanDetail.hundred_hour_fuel,
+          pine_cone_count: scanDetail.pine_cone_count,
+          fuelLoad: scanDetail.fuel_load || 'Unknown',  // Keep legacy for display
           fuelDensity: scanDetail.fuel_density || 0,
           biomass: scanDetail.biomass || 0,
           recommendations: [
@@ -451,7 +413,7 @@ function App() {
         // Fallback to cached data
         setScanResultData(marker.scanData)
       }
-      
+
       setShowResults(true)
     } catch (error) {
       console.error('Failed to load scan details:', error)
@@ -486,6 +448,7 @@ function App() {
         onPauseScan={handlePauseScan}
         onResumeScan={handleResumeScan}
         onStopScan={handleStopScan}
+        onUpdateBoundary={handleUpdateBoundary}
       />
       <main className="main-content">
         <MapView

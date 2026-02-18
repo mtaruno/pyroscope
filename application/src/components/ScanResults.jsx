@@ -1,7 +1,33 @@
-import { ArrowLeft, Edit2, AlertTriangle, Thermometer, Flame, MapPin, FileText } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { ArrowLeft, Edit2, AlertTriangle, Thermometer, Flame, MapPin, FileText, ChevronDown, ChevronUp, Table } from 'lucide-react'
+import HeatmapPanel from './HeatmapPanel'
+import apiClient from '../services/api'
 import './ScanResults.css'
 
 function ScanResults({ scanData, onBack }) {
+  // Extract scan ID from scanData
+  const scanId = scanData.id || scanData.scanId
+  const [pointData, setPointData] = useState(null)
+  const [showPointData, setShowPointData] = useState(false)
+  const [loadingPoints, setLoadingPoints] = useState(false)
+  
+  // Load point-level data when toggled
+  useEffect(() => {
+    const loadPointData = async () => {
+      if (showPointData && !pointData && scanId) {
+        setLoadingPoints(true)
+        try {
+          const data = await apiClient.getHeatmapData(scanId)
+          setPointData(data)
+        } catch (error) {
+          console.error('Failed to load point data:', error)
+        } finally {
+          setLoadingPoints(false)
+        }
+      }
+    }
+    loadPointData()
+  }, [showPointData, scanId, pointData])
   return (
     <div className="scan-results">
       {/* Header */}
@@ -62,7 +88,7 @@ function ScanResults({ scanData, onBack }) {
                 </span>
               </div>
               <div className="results-row">
-                <span className="results-label">Avg Plant Temp:</span>
+                <span className="results-label">Avg Ground Temp:</span>
                 <span className="results-value">{scanData.avgPlantTemp} °C</span>
               </div>
               <div className="results-row">
@@ -85,20 +111,78 @@ function ScanResults({ scanData, onBack }) {
               Fuel Estimation
             </h3>
             <div className="results-card">
-              <div className="results-row">
-                <span className="results-label">Estimated Fuel Load:</span>
-                <span className={`results-value fuel-${scanData.fuelLoad.toLowerCase()}`}>
-                  {scanData.fuelLoad}
-                </span>
-              </div>
-              <div className="results-row">
-                <span className="results-label">Fuel Density Index:</span>
-                <span className="results-value">{scanData.fuelDensity}</span>
-              </div>
-              <div className="results-row">
-                <span className="results-label">Estimated Biomass:</span>
-                <span className="results-value">{scanData.biomass} kg / m²</span>
-              </div>
+              {/* Total Fuel Load */}
+              {scanData.fuel_load !== undefined && scanData.fuel_load !== null && (
+                <div className="results-row highlight">
+                  <span className="results-label">Total Fuel Load:</span>
+                  <span className="results-value fuel-total">
+                    {scanData.fuel_load.toFixed(3)} tons/acre
+                  </span>
+                </div>
+              )}
+              
+              {/* Detailed Fuel Breakdown */}
+              {scanData.one_hour_fuel !== undefined && scanData.one_hour_fuel !== null && (
+                <div className="results-row">
+                  <span className="results-label">1-Hour Fuel:</span>
+                  <span className="results-value">{scanData.one_hour_fuel.toFixed(3)} tons/acre</span>
+                </div>
+              )}
+              
+              {scanData.ten_hour_fuel !== undefined && scanData.ten_hour_fuel !== null && (
+                <div className="results-row">
+                  <span className="results-label">10-Hour Fuel:</span>
+                  <span className="results-value">{scanData.ten_hour_fuel.toFixed(3)} tons/acre</span>
+                </div>
+              )}
+              
+              {scanData.hundred_hour_fuel !== undefined && scanData.hundred_hour_fuel !== null && (
+                <div className="results-row">
+                  <span className="results-label">100-Hour Fuel:</span>
+                  <span className="results-value">{scanData.hundred_hour_fuel.toFixed(3)} tons/acre</span>
+                </div>
+              )}
+              
+              {/* Pine Cone Count */}
+              {scanData.pine_cone_count !== undefined && scanData.pine_cone_count !== null && (
+                <div className="results-row">
+                  <span className="results-label">Pine Cone Count:</span>
+                  <span className="results-value">{scanData.pine_cone_count}</span>
+                </div>
+              )}
+              
+              {/* Legacy Fields (if new data not available) */}
+              {!scanData.fuel_load && scanData.fuelLoad && (
+                <div className="results-row">
+                  <span className="results-label">Estimated Fuel Load:</span>
+                  <span className={`results-value fuel-${scanData.fuelLoad.toLowerCase()}`}>
+                    {scanData.fuelLoad}
+                  </span>
+                </div>
+              )}
+              
+              {scanData.fuelDensity && (
+                <div className="results-row">
+                  <span className="results-label">Fuel Density Index:</span>
+                  <span className="results-value">{scanData.fuelDensity}</span>
+                </div>
+              )}
+              
+              {scanData.biomass && (
+                <div className="results-row">
+                  <span className="results-label">Estimated Biomass:</span>
+                  <span className="results-value">{scanData.biomass} kg / m²</span>
+                </div>
+              )}
+              
+              {/* No Data Message */}
+              {!scanData.fuel_load && !scanData.fuelLoad && (
+                <div className="results-row">
+                  <span className="results-value" style={{ color: '#666', fontStyle: 'italic' }}>
+                    No fuel estimation data available
+                  </span>
+                </div>
+              )}
             </div>
           </section>
 
@@ -134,32 +218,103 @@ function ScanResults({ scanData, onBack }) {
               </div>
             </div>
           </section>
+
+          {/* Point-Level Data */}
+          <section className="results-section">
+            <button 
+              className="point-data-toggle"
+              onClick={() => setShowPointData(!showPointData)}
+            >
+              <div className="point-data-toggle-header">
+                <Table size={16} />
+                <span>Point-Level Data</span>
+              </div>
+              {showPointData ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            
+            {showPointData && (
+              <div className="point-data-container">
+                {loadingPoints ? (
+                  <div className="point-data-loading">Loading data...</div>
+                ) : pointData && pointData.data_points ? (
+                  <div className="point-data-table-wrapper">
+                    <div className="point-data-count">
+                      {pointData.total_points} measurement points
+                    </div>
+                    <table className="point-data-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Lat</th>
+                          <th>Lng</th>
+                          <th>Ground T°</th>
+                          <th>Air T°</th>
+                          <th>Humidity</th>
+                          <th>1h Fuel</th>
+                          <th>10h Fuel</th>
+                          <th>100h Fuel</th>
+                          <th>Risk</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pointData.data_points.map((point, index) => (
+                          <tr key={index}>
+                            <td>{index + 1}</td>
+                            <td>{point.latitude?.toFixed(6) || '-'}</td>
+                            <td>{point.longitude?.toFixed(6) || '-'}</td>
+                            <td>{point.plant_temperature?.toFixed(1) || '-'}°C</td>
+                            <td>{point.air_temperature?.toFixed(1) || '-'}°C</td>
+                            <td>{point.air_humidity?.toFixed(0) || '-'}%</td>
+                            <td>{point.one_hour_fuel?.toFixed(3) || '-'}</td>
+                            <td>{point.ten_hour_fuel?.toFixed(3) || '-'}</td>
+                            <td>{point.hundred_hour_fuel?.toFixed(3) || '-'}</td>
+                            <td>
+                              <span className={`risk-badge risk-${getRiskLevel(point.fire_risk)}`}>
+                                {point.fire_risk?.toFixed(2) || '-'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="point-data-empty">No point data available</div>
+                )}
+              </div>
+            )}
+          </section>
         </div>
 
-        {/* Right Panel - Thermal Map */}
+        {/* Right Panel - Heatmap */}
         <div className="results-main">
-          <div className="thermal-map-container">
-            <div className="thermal-map-placeholder">
-              <Thermometer size={48} className="thermal-icon" />
-              <h2>Thermal Map</h2>
-              <p>Thermal imaging data will be displayed here</p>
+          {scanId ? (
+            <HeatmapPanel 
+              scanId={scanId}
+              centerLat={parseFloat(scanData.latitude)}
+              centerLng={parseFloat(scanData.longitude)}
+            />
+          ) : (
+            <div className="thermal-map-container">
+              <div className="thermal-map-placeholder">
+                <Thermometer size={48} className="thermal-icon" />
+                <h2>Heatmap Visualization</h2>
+                <p>No scan ID available</p>
+              </div>
             </div>
-          </div>
-
-          {/* Temperature Legend */}
-          <div className="temperature-legend">
-            <span className="legend-title">Temperature</span>
-            <div className="legend-gradient"></div>
-            <div className="legend-labels">
-              <span>25°C</span>
-              <span>32°C</span>
-              <span>40°C</span>
-            </div>
-          </div>
+          )}
         </div>
       </div>
     </div>
   )
+}
+
+// Helper function to categorize risk level
+function getRiskLevel(riskValue) {
+  if (!riskValue) return 'unknown'
+  if (riskValue < 0.33) return 'low'
+  if (riskValue < 0.67) return 'medium'
+  return 'high'
 }
 
 export default ScanResults

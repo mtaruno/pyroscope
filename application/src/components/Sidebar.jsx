@@ -1,4 +1,5 @@
-import { Edit2, MapPin, Settings, Activity, Thermometer, History, Target, Pause, Play, Square } from 'lucide-react'
+import { useState } from 'react'
+import { Edit2, MapPin, Settings, Activity, Thermometer, History, Target, Pause, Play, Square, RefreshCw } from 'lucide-react'
 import './Sidebar.css'
 
 function Sidebar({
@@ -16,13 +17,58 @@ function Sidebar({
   onStartScan,
   onPauseScan,
   onResumeScan,
-  onStopScan
+  onStopScan,
+  onUpdateBoundary
 }) {
+  const [updatingLocation, setUpdatingLocation] = useState(false)
+
   const handleZoneNameEdit = () => {
     const newName = prompt('Enter new zone name:', locationData.zoneName)
     if (newName) {
       setLocationData(prev => ({ ...prev, zoneName: newName }))
     }
+  }
+
+  const handleRefreshLocation = () => {
+    if (!navigator.geolocation) {
+      alert('Geolocation is not supported by your browser')
+      return
+    }
+
+    setUpdatingLocation(true)
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const newLat = position.coords.latitude
+        const newLng = position.coords.longitude
+        const accuracy = position.coords.accuracy
+
+        // Update location data
+        setLocationData(prev => ({
+          ...prev,
+          latitude: newLat,
+          longitude: newLng,
+          gpsAccuracy: accuracy
+        }))
+
+        // Update boundary and scan target
+        if (onUpdateBoundary) {
+          onUpdateBoundary(newLat, newLng)
+        }
+
+        setUpdatingLocation(false)
+      },
+      (error) => {
+        console.error('Error getting location:', error)
+        alert(`Failed to get location: ${error.message}`)
+        setUpdatingLocation(false)
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      }
+    )
   }
 
   return (
@@ -58,7 +104,18 @@ function Sidebar({
             <span className="info-label">GPS Accuracy:</span>
             <span className="info-value">±{locationData.gpsAccuracy} m</span>
           </div>
-          
+
+          {/* Refresh Location Button */}
+          <button
+            className={`refresh-location-btn ${updatingLocation ? 'loading' : ''}`}
+            onClick={handleRefreshLocation}
+            disabled={updatingLocation || isScanning}
+            title="Update current location and boundary"
+          >
+            <RefreshCw size={14} className={updatingLocation ? 'spinning' : ''} />
+            <span>{updatingLocation ? 'Updating...' : 'Refresh Location'}</span>
+          </button>
+
           {/* Designated Scan Location */}
           {scanTarget && (
             <>
@@ -86,7 +143,7 @@ function Sidebar({
               </div>
             </>
           )}
-          
+
           {/* Scan Progress */}
           {(isScanning || scanProgress > 0) && (
             <div className="scan-progress-container">
@@ -95,37 +152,37 @@ function Sidebar({
                 <span className="scan-progress-percent">{Math.round(scanProgress)}%</span>
               </div>
               <div className="scan-progress-bar">
-                <div 
+                <div
                   className="scan-progress-fill"
                   style={{ width: `${scanProgress}%` }}
                 />
                 <div className="scan-progress-robot" style={{ left: `${scanProgress}%` }}>
                   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     {/* Tank body */}
-                    <rect x="4" y="10" width="16" height="8" rx="2" fill="#22c55e"/>
+                    <rect x="4" y="10" width="16" height="8" rx="2" fill="#22c55e" />
                     {/* Tank turret */}
-                    <rect x="8" y="6" width="8" height="5" rx="1" fill="#16a34a"/>
+                    <rect x="8" y="6" width="8" height="5" rx="1" fill="#16a34a" />
                     {/* Tank tracks */}
-                    <ellipse cx="7" cy="18" rx="3" ry="2" fill="#166534"/>
-                    <ellipse cx="17" cy="18" rx="3" ry="2" fill="#166534"/>
+                    <ellipse cx="7" cy="18" rx="3" ry="2" fill="#166534" />
+                    <ellipse cx="17" cy="18" rx="3" ry="2" fill="#166534" />
                     {/* Track details */}
-                    <rect x="4" y="17" width="16" height="2" fill="#166534"/>
+                    <rect x="4" y="17" width="16" height="2" fill="#166534" />
                     {/* Antenna */}
-                    <line x1="10" y1="6" x2="10" y2="3" stroke="#22c55e" strokeWidth="1"/>
-                    <circle cx="10" cy="2.5" r="1" fill="#4ade80"/>
+                    <line x1="10" y1="6" x2="10" y2="3" stroke="#22c55e" strokeWidth="1" />
+                    <circle cx="10" cy="2.5" r="1" fill="#4ade80" />
                     {/* Window/sensor */}
-                    <rect x="10" y="7.5" width="4" height="2" rx="0.5" fill="#86efac"/>
+                    <rect x="10" y="7.5" width="4" height="2" rx="0.5" fill="#86efac" />
                   </svg>
                 </div>
               </div>
               <div className="scan-phase">{scanPhase}</div>
             </div>
           )}
-          
+
           {/* Scan Control Buttons */}
           {isScanning ? (
             <div className="scan-controls">
-              <button 
+              <button
                 className={`scan-button pause-btn ${isPaused ? 'paused' : ''}`}
                 onClick={isPaused ? onResumeScan : onPauseScan}
               >
@@ -141,7 +198,7 @@ function Sidebar({
                   </>
                 )}
               </button>
-              <button 
+              <button
                 className="scan-button stop-btn"
                 onClick={onStopScan}
                 title="Stop Scan"
@@ -150,7 +207,7 @@ function Sidebar({
               </button>
             </div>
           ) : (
-            <button 
+            <button
               className="scan-button start-btn"
               onClick={onStartScan}
             >
@@ -194,7 +251,7 @@ function Sidebar({
             <span className="info-value">{robotStatus.battery}%</span>
           </div>
           <div className="progress-bar">
-            <div 
+            <div
               className="progress-fill battery"
               style={{ width: `${robotStatus.battery}%` }}
             />
@@ -230,24 +287,24 @@ function Sidebar({
           <div className="info-row">
             <span className="info-label">Air Temperature:</span>
             <span className="info-value">
-              {environmentalData.airTemperature !== null 
-                ? `${environmentalData.airTemperature} °C` 
+              {environmentalData.airTemperature !== null
+                ? `${environmentalData.airTemperature} °C`
                 : '— °C'}
             </span>
           </div>
           <div className="info-row">
             <span className="info-label">Air Humidity:</span>
             <span className="info-value">
-              {environmentalData.airHumidity !== null 
-                ? `${environmentalData.airHumidity} %` 
+              {environmentalData.airHumidity !== null
+                ? `${environmentalData.airHumidity} %`
                 : '— %'}
             </span>
           </div>
           <div className="info-row">
             <span className="info-label">Wind Speed:</span>
             <span className="info-value">
-              {environmentalData.windSpeed !== null 
-                ? `${environmentalData.windSpeed} m/s` 
+              {environmentalData.windSpeed !== null
+                ? `${environmentalData.windSpeed} m/s`
                 : '— m/s'}
             </span>
           </div>

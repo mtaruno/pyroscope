@@ -11,6 +11,9 @@ class EnvironmentalDataCreate(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     measured_at: datetime
+    one_hour_fuel: Optional[float] = None
+    ten_hour_fuel: Optional[float] = None
+    hundred_hour_fuel: Optional[float] = None
 
 
 class EnvironmentalBatchCreate(BaseModel):

@@ -64,14 +64,14 @@ function DataLog({ logs }) {
   }, [isDragging, handleMouseMove, handleMouseUp])
 
   return (
-    <div 
+    <div
       ref={containerRef}
       className={`data-log-wrapper ${isExpanded ? 'expanded' : 'collapsed'} ${isDragging ? 'dragging' : ''}`}
     >
       <div className="data-log">
         {/* Resize Handle - only visible when expanded */}
         {isExpanded && (
-          <div 
+          <div
             className="resize-handle"
             onMouseDown={handleMouseDown}
           >
@@ -90,7 +90,7 @@ function DataLog({ logs }) {
           </button>
         </div>
 
-        <div 
+        <div
           className={`data-log-content ${isExpanded ? 'show' : 'hide'}`}
           style={isExpanded ? { maxHeight: `${height}px` } : {}}
         >
@@ -102,8 +102,8 @@ function DataLog({ logs }) {
                 <th>Zone</th>
                 <th>Avg Air Temp (°C)</th>
                 <th>Avg Humidity (%)</th>
-                <th>Avg Plant Temp</th>
-                <th>Fuel Load</th>
+                <th>Avg Ground Temp (°C)</th>
+                <th>Total Fuel Load (tons/acre)</th>
               </tr>
             </thead>
             <tbody>
@@ -114,17 +114,15 @@ function DataLog({ logs }) {
                   <td>{log.zone}</td>
                   <td>{log.avgAirTemp} °C</td>
                   <td>{log.avgHumidity} %</td>
-                  <td>{log.avgPlantTemp}</td>
+                  <td>{log.avgPlantTemp} °C</td>
                   <td>
-                    <span className={`fuel-badge ${getFuelLoadClass(log.fuelLoad)}`}>
-                      {log.fuelLoad}
-                    </span>
+                    {(log.fuelLoad !== null && log.fuelLoad !== undefined) ? log.fuelLoad.toFixed(3) : '-'}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          
+
           {logs.length === 0 && (
             <div className="empty-state">
               <p>No scan data available yet. Start a scan to collect data.</p>

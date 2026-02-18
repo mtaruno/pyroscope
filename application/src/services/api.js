@@ -62,7 +62,7 @@ class ApiClient {
     formData.append('scan_id', scanId);
     formData.append('image_type', metadata.image_type || 'visible');
     formData.append('file', file);
-    
+
     if (metadata.latitude) formData.append('latitude', metadata.latitude);
     if (metadata.longitude) formData.append('longitude', metadata.longitude);
     if (metadata.captured_at) formData.append('captured_at', metadata.captured_at);
@@ -97,23 +97,29 @@ class ApiClient {
     });
   }
 
+  // Heatmap Data
+  async getHeatmapData(scanId) {
+    return this.request(`/scans/${scanId}/heatmap-data`);
+  }
+}
+
   // Mission Control
   async startCoverageMission(config = {}) {
-    return this.request('/robot/mission/start', {
-      method: 'POST',
-      body: JSON.stringify(config)
-    });
-  }
+  return this.request('/robot/mission/start', {
+    method: 'POST',
+    body: JSON.stringify(config)
+  });
+}
 
   async stopCoverageMission() {
-    return this.request('/robot/mission/stop', {
-      method: 'POST'
-    });
-  }
+  return this.request('/robot/mission/stop', {
+    method: 'POST'
+  });
+}
 
   async getMissionStatus() {
-    return this.request('/robot/mission/status');
-  }
+  return this.request('/robot/mission/status');
+}
 }
 
 // Export singleton instance

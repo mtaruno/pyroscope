@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Interpolation Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+        }
+
+        #canvas {
+            border: 1px solid #ccc;
+            margin: 20px 0;
+        }
+
+        .info {
+            background: #f0f0f0;
+            padding: 10px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Bilinear Interpolation Test</h1>
+
+    <div class="info">
+        <h3>Test Data: 5x5 Grid</h3>
+        <pre id="gridData"></pre>
+    </div>
+
+    <div class="info">
+        <h3>Interpolated Result (50x50 pixels)</h3>
+        <canvas id="canvas" width="200" height="200"></canvas>
+    </div>
+
+    <div class="info">
+        <h3>Color Scale</h3>
+        <canvas id="legend" width="400" height="50"></canvas>
+    </div>
+
+    <script>
+        // Test grid data (5x5)
+        const gridData = [
+            [10, 12, 15, 18, 20],
+            [12, 15, 18, 22, 25],
+            [15, 18, 22, 28, 30],
+            [18, 22, 28, 32, 35],
+            [20, 25, 30, 35, 40]
+        ];
+
+        // Display grid data
+        document.getElementById('gridData').textContent = gridData.map(row =>
+            row.map(v => v.toString().padStart(3)).join(' ')
+        ).join('\n');
+
+        // Color function (same as in code)
+        function getColorForValue(value, min, max) {
+            const normalized = (value - min) / (max - min);
+            const clamped = Math.max(0, Math.min(1, normalized));
+
+            const colors = [
+                { pos: 0.0, r: 0, g: 0, b: 255 },
+                { pos: 0.25, r: 0, g: 255, b: 255 },
+                { pos: 0.5, r: 0, g: 255, b: 0 },
+                { pos: 0.65, r: 255, g: 255, b: 0 },
+                { pos: 0.8, r: 255, g: 128, b: 0 },
+                { pos: 1.0, r: 255, g: 0, b: 0 }
+            ];
+
+            let i = 0;
+            while (i < colors.length - 1 && colors[i + 1].pos < clamped) {
+                i++;
+            }
+
+            const c1 = colors[i];
+            const c2 = colors[Math.min(i + 1, colors.length - 1)];
+
+            const range = c2.pos - c1.pos;
+            const rangePct = range === 0 ? 0 : (clamped - c1.pos) / range;
+
+            const r = Math.round(c1.r + (c2.r - c1.r) * rangePct);
+            const g = Math.round(c1.g + (c2.g - c1.g) * rangePct);
+            const b = Math.round(c1.b + (c2.b - c1.b) * rangePct);
+
+            return { r, g, b };
+        }
+
+        // Bilinear interpolation
+        function bilinearInterpolate(x, y, data) {
+            const col = x;
+            const row = y;
+
+            const col0 = Math.floor(col);
+            const row0 = Math.floor(row);
+            const col1 = Math.min(col0 + 1, data[0].length - 1);
+            const row1 = Math.min(row0 + 1, data.length - 1);
+
+            const dx = col - col0;
+            const dy = row - row0;
+
+            const v00 = data[row0][col0];
+            const v10 = data[row0][col1];
+            const v01 = data[row1][col0];
+            const v11 = data[row1][col1];
+
+            const top = v00 * (1 - dx) + v10 * dx;
+            const bottom = v01 * (1 - dx) + v11 * dx;
+            return top * (1 - dy) + bottom * dy;
+        }
+
+        // Draw interpolated heatmap
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.createImageData(200, 200);
+        const data = imageData.data;
+
+        const minValue = 10;
+        const maxValue = 40;
+        const gridSize = 5;
+
+        for (let py = 0; py < 200; py++) {
+            for (let px = 0; px < 200; px++) {
+                // Convert pixel to grid coordinates
+                const gridX = (px / 200) * (gridSize - 1);
+                const gridY = (py / 200) * (gridSize - 1);
+
+                const value = bilinearInterpolate(gridX, gridY, gridData);
+                const color = getColorForValue(value, minValue, maxValue);
+
+                const idx = (py * 200 + px) * 4;
+                data[idx] = color.r;
+                data[idx + 1] = color.g;
+                data[idx + 2] = color.b;
+                data[idx + 3] = 255;
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        // Draw legend
+        const legendCanvas = document.getElementById('legend');
+        const legendCtx = legendCanvas.getContext('2d');
+
+        for (let i = 0; i < 400; i++) {
+            const value = minValue + (i / 400) * (maxValue - minValue);
+            const color = getColorForValue(value, minValue, maxValue);
+            legendCtx.fillStyle = `rgb(${color.r}, ${color.g}, ${color.b})`;
+            legendCtx.fillRect(i, 0, 1, 30);
+        }
+
+        legendCtx.fillStyle = '#000';
+        legendCtx.font = '12px monospace';
+        legendCtx.fillText(minValue.toString(), 5, 45);
+        legendCtx.fillText(maxValue.toString(), 370, 45);
+    </script>
+</body>
+
+</html>

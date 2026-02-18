@@ -17,6 +17,10 @@ class EnvironmentalData(Base):
     longitude = Column(DECIMAL(11, 8), nullable=True)
     measured_at = Column(TIMESTAMP, nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
+    # Fuel estimation fields for each point
+    one_hour_fuel = Column(DECIMAL(10, 4), nullable=True)
+    ten_hour_fuel = Column(DECIMAL(10, 4), nullable=True)
+    hundred_hour_fuel = Column(DECIMAL(10, 4), nullable=True)
     
     # Relationships
     scan = relationship("ScanRecord", back_populates="environmental_data")
