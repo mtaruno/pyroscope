@@ -9,8 +9,8 @@ import './App.css'
 function App() {
   const [locationData, setLocationData] = useState({
     zoneName: 'Area A-01',
-    latitude: 34.2257,
-    longitude: -117.8512,
+    latitude: 47.1607476,
+    longitude: -120.7953433,
     gpsAccuracy: 2.3
   })
 
@@ -324,7 +324,25 @@ function App() {
     }
   }, [isScanning, isPaused])
 
-  const handleStartScan = () => {
+  const handleStartScan = async () => {
+    try {
+      const missionConfig = {
+        area_width: 5.0,
+        area_height: 5.0,
+        row_spacing: 0.8,
+        waypoint_spacing: 0.5,
+        origin_x: 0.0,
+        origin_y: 0.0,
+        dwell_time: 2.0,
+        waypoint_timeout: 30.0
+      }
+      await apiClient.startCoverageMission(missionConfig)
+      console.log('Coverage mission started on robot')
+    } catch (error) {
+      console.error('Failed to start coverage mission:', error)
+      alert(`Failed to start mission: ${error.message}`)
+      return
+    }
     setIsScanning(true)
     setIsPaused(false)
     setScanProgress(0)
@@ -345,7 +363,13 @@ function App() {
     setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
   }
 
-  const handleStopScan = () => {
+  const handleStopScan = async () => {
+    try {
+      await apiClient.stopCoverageMission()
+      console.log('Coverage mission stopped on robot')
+    } catch (error) {
+      console.error('Failed to stop coverage mission:', error.message)
+    }
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current)
     }

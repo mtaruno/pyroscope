@@ -101,25 +101,24 @@ class ApiClient {
   async getHeatmapData(scanId) {
     return this.request(`/scans/${scanId}/heatmap-data`);
   }
-}
 
   // Mission Control
   async startCoverageMission(config = {}) {
-  return this.request('/robot/mission/start', {
-    method: 'POST',
-    body: JSON.stringify(config)
-  });
-}
+    return this.request('/robot/mission/start', {
+      method: 'POST',
+      body: JSON.stringify(config)
+    });
+  }
 
   async stopCoverageMission() {
-  return this.request('/robot/mission/stop', {
-    method: 'POST'
-  });
-}
+    return this.request('/robot/mission/stop', {
+      method: 'POST'
+    });
+  }
 
   async getMissionStatus() {
-  return this.request('/robot/mission/status');
-}
+    return this.request('/robot/mission/status');
+  }
 }
 
 // Export singleton instance

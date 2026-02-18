@@ -12,7 +12,7 @@ dist/
 build/
 
 # Environment
-.env
+# .env  # temporarily tracked for remote PC deployment
 
 # Database
 *.db
