@@ -75,8 +75,7 @@ async def start_coverage_mission(config: MissionConfig = None):
             'bash', '-c',
             f'unset VIRTUAL_ENV && unset CONDA_DEFAULT_ENV && unset PYTHONHOME && '
             f'export PYTHONPATH=/usr/lib/python2.7/dist-packages && '
-            f'export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin && '
-            f'export PYTHON=/usr/bin/python2.7 && '
+            f'export PATH=/usr/bin:/usr/sbin:/bin:/sbin && '
             f'source /opt/ros/melodic/setup.bash && '
             f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
             f'roslaunch pyroscope_navigation coverage_mission.launch '
