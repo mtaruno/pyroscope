@@ -3,8 +3,12 @@ import Sidebar from './components/Sidebar'
 import MapView from './components/MapView'
 import DataLog from './components/DataLog'
 import ScanResults from './components/ScanResults'
+import SensorPanel from './components/SensorPanel'
 import apiClient from './services/api'
 import './App.css'
+
+// 🔧 TOGGLE: Set to false to disable robot mission launch (UI-only mode)
+const ENABLE_ROBOT_MISSION = false
 
 function App() {
   const [locationData, setLocationData] = useState({
@@ -321,27 +325,33 @@ function App() {
   }, [isScanning, activeScanId])
 
   const handleStartScan = async () => {
-    try {
-      const missionConfig = {
-        area_width: 5.0,
-        area_height: 5.0,
-        row_spacing: 0.8,
-        waypoint_spacing: 0.5,
-        origin_x: 0.0,
-        origin_y: 0.0,
-        dwell_time: 2.0,
-        waypoint_timeout: 30.0
+    // Only call backend if robot mission enabled
+    if (ENABLE_ROBOT_MISSION) {
+      try {
+        const missionConfig = {
+          area_width: 5.0,
+          area_height: 5.0,
+          row_spacing: 0.8,
+          waypoint_spacing: 0.5,
+          origin_x: 0.0,
+          origin_y: 0.0,
+          dwell_time: 2.0,
+          waypoint_timeout: 30.0
+        }
+        const response = await apiClient.startCoverageMission(missionConfig)
+        const scanId = response?.scan_id ?? null
+        if (scanId) setActiveScanId(scanId)
+        setLatestCapture(null)
+        console.log('Coverage mission started on robot', scanId ? `scan_id=${scanId}` : '')
+      } catch (error) {
+        console.error('Failed to start coverage mission:', error)
+        alert(`Failed to start mission: ${error.message}`)
+        return
       }
-      const response = await apiClient.startCoverageMission(missionConfig)
-      const scanId = response?.scan_id ?? null
-      if (scanId) setActiveScanId(scanId)
-      setLatestCapture(null)
-      console.log('Coverage mission started on robot', scanId ? `scan_id=${scanId}` : '')
-    } catch (error) {
-      console.error('Failed to start coverage mission:', error)
-      alert(`Failed to start mission: ${error.message}`)
-      return
+    } else {
+      console.log('⚠️ Robot mission disabled (ENABLE_ROBOT_MISSION = false) - UI-only mode')
     }
+
     setIsScanning(true)
     setIsPaused(false)
     setScanProgress(0)
@@ -363,11 +373,16 @@ function App() {
   }
 
   const handleStopScan = async () => {
-    try {
-      await apiClient.stopCoverageMission()
-      console.log('Coverage mission stopped on robot')
-    } catch (error) {
-      console.error('Failed to stop coverage mission:', error.message)
+    // Only call backend if robot mission enabled
+    if (ENABLE_ROBOT_MISSION) {
+      try {
+        await apiClient.stopCoverageMission()
+        console.log('Coverage mission stopped on robot')
+      } catch (error) {
+        console.error('Failed to stop coverage mission:', error.message)
+      }
+    } else {
+      console.log('⚠️ Robot mission disabled - skipping stop call')
     }
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current)
@@ -520,6 +535,7 @@ function App() {
           onScanTargetChange={handleScanTargetChange}
           onMarkerClick={handleMarkerClick}
         />
+        <SensorPanel />
         {isScanning && (
           <section className="latest-capture-panel" aria-label="Latest capture">
             <h3 className="latest-capture-title">Latest capture</h3>
