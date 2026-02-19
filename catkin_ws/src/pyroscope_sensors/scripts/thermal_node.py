@@ -10,12 +10,28 @@ import sys
 import rospy
 from std_msgs.msg import Float64
 from sensor_msgs.msg import Image
-try:
-    from cv_bridge import CvBridge
-    HAS_CV_BRIDGE = True
-except ImportError:
-    HAS_CV_BRIDGE = False
-    CvBridge = None
+from std_msgs.msg import Header
+
+
+def cv2_to_ros_image(cv2_img, encoding="bgr8", frame_id="thermal"):
+    """Build sensor_msgs/Image from OpenCV image without cv_bridge (Python 3 safe)."""
+    if cv2_img is None or cv2_img.size == 0:
+        return None
+    height, width = cv2_img.shape[:2]
+    if len(cv2_img.shape) == 2:
+        step = width
+        encoding = "mono8"
+    else:
+        step = width * cv2_img.shape[2]
+    msg = Image()
+    msg.header = Header(stamp=rospy.Time.now(), frame_id=frame_id)
+    msg.height = height
+    msg.width = width
+    msg.encoding = encoding
+    msg.is_bigendian = 0
+    msg.step = step
+    msg.data = cv2_img.tobytes()
+    return msg
 
 def _add_pyroscope_path():
     root = rospy.get_param("~pyroscope_root", "")
@@ -47,14 +63,7 @@ def main():
     simulate = rospy.get_param("~simulate", False)
 
     pub_mean = rospy.Publisher("/sensors/thermal/mean", Float64, queue_size=1)
-    pub_image = None
-    bridge = None
-    if publish_image and HAS_CV_BRIDGE and CvBridge:
-        try:
-            bridge = CvBridge()
-            pub_image = rospy.Publisher("/sensors/thermal/image", Image, queue_size=1)
-        except Exception as e:
-            rospy.logwarn("cv_bridge not available, thermal image will not be published: %s", e)
+    pub_image = rospy.Publisher("/sensors/thermal/image", Image, queue_size=1) if publish_image else None
 
     rate = rospy.Rate(rate_hz)
     rospy.loginfo("Thermal node publishing mean at %.2f Hz (image=%s, simulate=%s)",
@@ -67,14 +76,13 @@ def main():
             mean = result.get("thermal_mean")
             if mean is not None:
                 pub_mean.publish(Float64(data=float(mean)))
-            if pub_image and bridge and result.get("image_path") and os.path.exists(result["image_path"]):
+            if pub_image and result.get("image_path") and os.path.exists(result["image_path"]):
                 import cv2
                 img = cv2.imread(result["image_path"])
                 if img is not None:
-                    msg = bridge.cv2_to_imgmsg(img, encoding="bgr8")
-                    msg.header.stamp = rospy.Time.now()
-                    msg.header.frame_id = "thermal"
-                    pub_image.publish(msg)
+                    msg = cv2_to_ros_image(img, encoding="bgr8", frame_id="thermal")
+                    if msg is not None:
+                        pub_image.publish(msg)
         except Exception as e:
             rospy.logerr_throttle(5, "Thermal capture failed: %s", e)
         rate.sleep()

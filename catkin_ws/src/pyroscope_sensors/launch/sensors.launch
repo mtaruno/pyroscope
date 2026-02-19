@@ -1,6 +1,6 @@
 <launch>
   <!-- Pyroscope repo root (contains sht40_reader.py, thermal_capture.py). Default for Jetson: /home/pyroscope -->
-  <arg name="pyroscope_root" default="/home/pyroscope"/>
+  <arg name="pyroscope_root" default="/home/jetson/pyroscope"/>
   <arg name="sht40_rate" default="1.0"/>
   <arg name="sht40_bus" default="1"/>
   <arg name="sht40_simulate" default="false"/>
