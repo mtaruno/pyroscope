@@ -39,15 +39,15 @@ except ImportError as e:
 
 def main():
     rate_hz = rospy.get_param("~rate", 1.0)
-    bus_num = rospy.get_param("~bus", 1)
-    simulate = rospy.get_param("~simulate", False)
+    port = rospy.get_param("~port", "/dev/ttyACM0")
+    baud = int(rospy.get_param("~baud", 9600))
 
     pub_temp = rospy.Publisher("/sensors/sht40/temperature", Float64, queue_size=1)
     pub_hum = rospy.Publisher("/sensors/sht40/humidity", Float64, queue_size=1)
 
-    sensor = SHT40Sensor(bus_num=int(bus_num), simulate=simulate)
+    sensor = SHT40Sensor(port=port, baud=baud)
     rate = rospy.Rate(rate_hz)
-    rospy.loginfo("SHT40 node publishing at %.1f Hz (simulate=%s)", rate_hz, simulate)
+    rospy.loginfo("SHT40 node (Arduino serial) publishing at %.1f Hz on %s", rate_hz, port)
 
     try:
         while not rospy.is_shutdown():

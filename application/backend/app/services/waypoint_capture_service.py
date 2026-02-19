@@ -36,13 +36,13 @@ _capture_state = {
 }
 
 
-def _run_sht40_once(simulate: bool = False) -> dict:
-    """Run sht40_reader.py --once, return parsed JSON or empty dict."""
+def _run_sht40_once(port: str = None) -> dict:
+    """Run sht40_reader.py --once (Arduino serial), return parsed JSON or empty dict."""
     if not _sht40_script.exists():
         return {"temperature": None, "humidity": None}
     cmd = [str(_sht40_script), "--once"]
-    if simulate:
-        cmd.append("--simulate")
+    if port:
+        cmd.extend(["--port", port])
     try:
         out = subprocess.run(
             cmd,
@@ -128,7 +128,7 @@ def _capture_loop_impl(scan_id: int):
             else:
                 rgb_waypoint_path = None
         else:
-            sht40_data = _run_sht40_once(simulate=simulate)
+            sht40_data = _run_sht40_once()
             thermal_data = _run_thermal_once(image_path=thermal_image_path, simulate=simulate)
             rgb_waypoint_path = None  # no RealSense in subprocess mode
 

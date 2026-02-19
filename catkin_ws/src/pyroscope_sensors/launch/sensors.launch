@@ -2,8 +2,8 @@
   <!-- Pyroscope repo root (contains sht40_reader.py, thermal_capture.py). Default for Jetson: /home/pyroscope -->
   <arg name="pyroscope_root" default="/home/jetson/pyroscope"/>
   <arg name="sht40_rate" default="1.0"/>
-  <arg name="sht40_bus" default="1"/>
-  <arg name="sht40_simulate" default="false"/>
+  <arg name="sht40_port" default="/dev/ttyACM0"/>
+  <arg name="sht40_baud" default="9600"/>
   <arg name="thermal_rate" default="0.33"/>
   <arg name="thermal_publish_image" default="true"/>
   <arg name="thermal_simulate" default="false"/>
@@ -18,8 +18,8 @@
   <node pkg="pyroscope_sensors" type="sht40_node.py" name="sht40_node" output="screen">
     <param name="pyroscope_root" value="$(arg pyroscope_root)"/>
     <param name="rate" value="$(arg sht40_rate)"/>
-    <param name="bus" value="$(arg sht40_bus)"/>
-    <param name="simulate" value="$(arg sht40_simulate)"/>
+    <param name="port" value="$(arg sht40_port)"/>
+    <param name="baud" value="$(arg sht40_baud)"/>
   </node>
 
   <node pkg="pyroscope_sensors" type="thermal_node.py" name="thermal_node" output="screen">

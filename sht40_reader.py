@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 """
-SHT40 Temperature and Humidity Sensor Reader for Jetson
-Reads data from SHT40 sensor via I2C and outputs with timestamp
+SHT40 Temperature and Humidity Sensor Reader (Arduino Nano over Serial).
+Hardware: SHT40 -> Arduino Nano (I2C) -> USB -> Jetson/PC.
+
+Arduino sketch must send one line per reading: "temperature,humidity"
+  e.g. Serial.println((String)temp + "," + (String)hum);
+  Use 9600 baud (Serial.begin(9600)) unless you pass --baud.
 """
 
 import argparse
@@ -10,78 +14,73 @@ import time
 import datetime
 import sys
 
-# Try to import real I2C library
 try:
-    import smbus2
-    HAS_I2C = True
+    import serial
+    HAS_SERIAL = True
 except ImportError:
-    HAS_I2C = False
+    HAS_SERIAL = False
 
-# SHT40 I2C address and commands
-SHT40_I2C_ADDR = 0x44
-SHT40_CMD_MEASURE_HIGH_PRECISION = 0xFD
+# Default serial port: Arduino Nano on Linux usually appears as ttyACM0
+DEFAULT_PORT = "/dev/ttyACM0"
+DEFAULT_BAUD = 9600
+# Timeout for reading one line (seconds)
+READ_TIMEOUT = 2.0
 
 
 class SHT40Sensor:
-    """SHT40 Temperature and Humidity Sensor Interface"""
+    """SHT40 via Arduino Nano over serial. One line per read: 'temp,hum'."""
 
-    def __init__(self, bus_num=1):
+    def __init__(self, port=None, baud=9600):
         """
-        Initialize SHT40 sensor.
+        Open serial connection to Arduino.
 
         Args:
-            bus_num: I2C bus number (default 1 for Jetson)
+            port: Serial port (e.g. /dev/ttyACM0 on Linux, COM3 on Windows). Default /dev/ttyACM0.
+            baud: Baud rate (default 9600). Must match Arduino Serial.begin().
         """
-        if not HAS_I2C:
-            raise RuntimeError("smbus2 not installed. Install with: pip install smbus2")
-        self.bus_num = bus_num
-        self.bus = smbus2.SMBus(bus_num)
-        self._test_connection()
-        print(f"SHT40 sensor connected on I2C bus {bus_num}")
-
-    def _test_connection(self):
-        """Test if sensor is responding."""
-        self.bus.write_byte(SHT40_I2C_ADDR, SHT40_CMD_MEASURE_HIGH_PRECISION)
+        if not HAS_SERIAL:
+            raise RuntimeError("pyserial not installed. Install with: pip install pyserial")
+        self.port = port or DEFAULT_PORT
+        self.baud = int(baud)
+        self.ser = serial.Serial(self.port, self.baud, timeout=READ_TIMEOUT)
+        # Allow Arduino to reset on connect (DTR); brief delay for boot
+        time.sleep(0.5)
+        self.ser.reset_input_buffer()
+        print(f"SHT40 (Arduino) connected on {self.port} @ {self.baud} baud")
 
     def read_data(self):
         """
-        Read temperature and humidity from sensor.
+        Read one line from Arduino and parse "temperature,humidity".
 
         Returns:
             tuple: (temperature_celsius, humidity_percent, timestamp)
         """
         timestamp = datetime.datetime.now()
         try:
-            # Send measurement command
-            self.bus.write_byte(SHT40_I2C_ADDR, SHT40_CMD_MEASURE_HIGH_PRECISION)
-
-            # Wait for measurement to complete (typical 8.2ms for high precision)
-            time.sleep(0.01)
-
-            # Read 6 bytes: temp MSB, temp LSB, temp CRC, hum MSB, hum LSB, hum CRC
-            data = self.bus.read_i2c_block_data(SHT40_I2C_ADDR, 0x00, 6)
-
-            # Convert temperature (formula from datasheet)
-            temp_raw = (data[0] << 8) | data[1]
-            temperature = -45 + 175 * (temp_raw / 65535.0)
-
-            # Convert humidity (formula from datasheet)
-            hum_raw = (data[3] << 8) | data[4]
-            humidity = -6 + 125 * (hum_raw / 65535.0)
-
-            # Clamp humidity to valid range
+            line = self.ser.readline()
+            if not line:
+                return None, None, timestamp
+            line = line.decode("utf-8", errors="ignore").strip()
+            if not line:
+                return None, None, timestamp
+            parts = line.split(",")
+            if len(parts) < 2:
+                return None, None, timestamp
+            temperature = float(parts[0].strip())
+            humidity = float(parts[1].strip())
             humidity = max(0, min(100, humidity))
-
-        except Exception as e:
-            print(f"Error reading sensor: {e}", file=sys.stderr)
+        except (ValueError, UnicodeDecodeError) as e:
+            print(f"Parse error: {e} (line: {line!r})", file=sys.stderr)
             return None, None, timestamp
-
+        except Exception as e:
+            print(f"Error reading serial: {e}", file=sys.stderr)
+            return None, None, timestamp
         return temperature, humidity, timestamp
 
     def close(self):
-        """Close I2C bus connection."""
-        if self.bus:
-            self.bus.close()
+        """Close serial connection."""
+        if self.ser and self.ser.is_open:
+            self.ser.close()
 
 
 def format_output(temperature, humidity, timestamp):
@@ -94,16 +93,16 @@ def format_output(temperature, humidity, timestamp):
             f"Humidity: {humidity:5.2f}%")
 
 
-def main():
-    """Main function to continuously read and display sensor data."""
+def main(port=None, baud=9600):
+    """Continuous read and display."""
     print("=" * 70)
-    print("SHT40 Temperature & Humidity Sensor Reader")
+    print("SHT40 (Arduino Serial) Temperature & Humidity Reader")
     print("=" * 70)
 
     try:
-        sensor = SHT40Sensor(bus_num=1)
+        sensor = SHT40Sensor(port=port or DEFAULT_PORT, baud=baud)
     except Exception as e:
-        print(f"Cannot open SHT40: {e}", file=sys.stderr)
+        print(f"Cannot open serial: {e}", file=sys.stderr)
         sys.exit(1)
 
     print("Starting continuous reading (Press Ctrl+C to stop)...")
@@ -115,7 +114,6 @@ def main():
             output = format_output(temperature, humidity, timestamp)
             print(output)
             time.sleep(1)
-
     except KeyboardInterrupt:
         print("\n" + "-" * 70)
         print("Stopped by user")
@@ -124,14 +122,14 @@ def main():
         sys.exit(1)
     finally:
         sensor.close()
-        print("Sensor connection closed")
+        print("Serial connection closed")
         print("=" * 70)
 
 
-def run_once(bus_num=1):
-    """Single read for backend subprocess: print one JSON line to stdout and exit."""
+def run_once(port=None, baud=9600):
+    """Single read: print one JSON line to stdout and exit. Used by backend subprocess."""
     try:
-        sensor = SHT40Sensor(bus_num=bus_num)
+        sensor = SHT40Sensor(port=port or DEFAULT_PORT, baud=baud)
     except Exception as e:
         print(json.dumps({"temperature": None, "humidity": None, "timestamp": None, "error": str(e)}))
         return
@@ -149,11 +147,15 @@ def run_once(bus_num=1):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="SHT40 Temperature & Humidity Reader")
+    parser = argparse.ArgumentParser(
+        description="SHT40 via Arduino Nano (serial). Expects lines: temperature,humidity"
+    )
     parser.add_argument("--once", action="store_true", help="Single read, output JSON to stdout and exit")
-    parser.add_argument("--bus", type=int, default=1, help="I2C bus number (default 1)")
+    parser.add_argument("--port", type=str, default=DEFAULT_PORT, help=f"Serial port (default {DEFAULT_PORT})")
+    parser.add_argument("--baud", type=int, default=DEFAULT_BAUD, help=f"Baud rate (default {DEFAULT_BAUD})")
     args = parser.parse_args()
+
     if args.once:
-        run_once(bus_num=args.bus)
+        run_once(port=args.port, baud=args.baud)
     else:
-        main()
+        main(port=args.port, baud=args.baud)
