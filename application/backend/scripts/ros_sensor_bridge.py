@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
 ROS Sensor Bridge - Subscribes to sensor topics and makes data available to FastAPI backend
@@ -23,7 +23,8 @@ class SensorBridge:
 
         # Shared data file path (FastAPI will read this)
         self.data_dir = os.path.expanduser('~/Dev/pyroscope/application/backend/sensor_data')
-        os.makedirs(self.data_dir, exist_ok=True)
+        if not os.path.exists(self.data_dir):
+            os.makedirs(self.data_dir)
 
         self.data_file = os.path.join(self.data_dir, 'latest_sensors.json')
         self.thermal_image_path = os.path.join(self.data_dir, 'thermal_latest.jpg')
