@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 ROS Sensor Bridge - Subscribes to sensor topics and makes data available to FastAPI backend
 Saves latest sensor values to JSON file for API to read
@@ -43,15 +44,15 @@ class SensorBridge:
         # Subscribe to sensor topics
         rospy.loginfo("Subscribing to sensor topics...")
         rospy.Subscriber('/sensors/sht40/temperature', Float64, self.temperature_callback)
-        rospy.loginfo("  ✓ /sensors/sht40/temperature")
+        rospy.loginfo("  [OK] /sensors/sht40/temperature")
         rospy.Subscriber('/sensors/sht40/humidity', Float64, self.humidity_callback)
-        rospy.loginfo("  ✓ /sensors/sht40/humidity")
+        rospy.loginfo("  [OK] /sensors/sht40/humidity")
         rospy.Subscriber('/sensors/thermal/mean', Float64, self.thermal_mean_callback)
-        rospy.loginfo("  ✓ /sensors/thermal/mean")
+        rospy.loginfo("  [OK] /sensors/thermal/mean")
         rospy.Subscriber('/sensors/thermal/image', Image, self.thermal_image_callback)
-        rospy.loginfo("  ✓ /sensors/thermal/image")
+        rospy.loginfo("  [OK] /sensors/thermal/image")
         rospy.Subscriber('/camera/color/image_raw', Image, self.rgb_image_callback)
-        rospy.loginfo("  ✓ /camera/color/image_raw")
+        rospy.loginfo("  [OK] /camera/color/image_raw")
 
         rospy.loginfo("Sensor bridge started - listening to all topics")
 
@@ -63,19 +64,19 @@ class SensorBridge:
         with self.lock:
             self.sensor_data['temperature'] = round(msg.data, 2)
             self.sensor_data['timestamp'] = time.time()
-            rospy.loginfo_throttle(5, f"Temperature: {msg.data:.2f}°C")
+            rospy.loginfo_throttle(5, "Temperature: %.2f C" % msg.data)
 
     def humidity_callback(self, msg):
         with self.lock:
             self.sensor_data['humidity'] = round(msg.data, 2)
             self.sensor_data['timestamp'] = time.time()
-            rospy.loginfo_throttle(5, f"Humidity: {msg.data:.2f}%")
+            rospy.loginfo_throttle(5, "Humidity: %.2f %%" % msg.data)
 
     def thermal_mean_callback(self, msg):
         with self.lock:
             self.sensor_data['thermal_mean'] = round(msg.data, 2)
             self.sensor_data['timestamp'] = time.time()
-            rospy.loginfo_throttle(5, f"Thermal mean: {msg.data:.2f}°C")
+            rospy.loginfo_throttle(5, "Thermal mean: %.2f C" % msg.data)
 
     def thermal_image_callback(self, msg):
         try:
