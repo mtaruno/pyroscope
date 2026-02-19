@@ -9,6 +9,10 @@
     <arg name="dwell_time" default="3.0"/>
     <arg name="waypoint_timeout" default="30.0"/>
 
+    <!-- Static transform: base_link -> laser (15cm above base) -->
+    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_tf"
+          args="0 0 0.15 0 0 0 base_link laser 100"/>
+
     <!-- Waypoint controller (drives to individual waypoints) -->
     <node pkg="pyroscope_navigation" type="waypoint_controller.py" name="waypoint_controller" output="screen">
         <param name="goal_tolerance" value="0.5"/>
