@@ -50,12 +50,12 @@ class SensorBridge:
         rospy.loginfo("  [OK] /sensors/sht40/humidity")
         rospy.Subscriber('/sensors/thermal/mean', Float64, self.thermal_mean_callback)
         rospy.loginfo("  [OK] /sensors/thermal/mean")
-        rospy.Subscriber('/sensors/thermal/image', Image, self.thermal_image_callback)
-        rospy.loginfo("  [OK] /sensors/thermal/image")
-        rospy.Subscriber('/camera/color/image_raw', Image, self.rgb_image_callback)
-        rospy.loginfo("  [OK] /camera/color/image_raw")
+        # rospy.Subscriber('/sensors/thermal/image', Image, self.thermal_image_callback)
+        # rospy.loginfo("  [OK] /sensors/thermal/image")
+        # rospy.Subscriber('/camera/color/image_raw', Image, self.rgb_image_callback)
+        # rospy.loginfo("  [OK] /camera/color/image_raw")
 
-        rospy.loginfo("Sensor bridge started - listening to all topics")
+        rospy.loginfo("Sensor bridge started - listening to sensor value topics (images disabled)")
 
         # Start background thread to periodically save data
         self.save_thread = threading.Thread(target=self.save_loop)
