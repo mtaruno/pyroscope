@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>pyroscope_sensors</name>
+  <version>0.1.0</version>
+  <description>ROS nodes for SHT40 and thermal camera on Jetson</description>
+
+  <maintainer email="matthew@pyroscope.dev">Matthew Taruno</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>cv_bridge</depend>
+
+  <export>
+  </export>
+</package>

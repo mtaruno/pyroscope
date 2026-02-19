@@ -85,6 +85,11 @@ class ApiClient {
     return `${API_BASE_URL}/images/${imageId}`;
   }
 
+  /** Base URL for API server (no /api suffix), for relative paths like /api/images/1 */
+  getBaseUrl() {
+    return API_BASE_URL.replace(/\/api\/?$/, '');
+  }
+
   // Robot Status
   async getRobotStatus(robotId) {
     return this.request(`/robot/${robotId}/status`);
@@ -100,6 +105,16 @@ class ApiClient {
   // Heatmap Data
   async getHeatmapData(scanId) {
     return this.request(`/scans/${scanId}/heatmap-data`);
+  }
+
+  // Waypoint capture (latest + samples list)
+  async getLatestCapture(scanId) {
+    return this.request(`/scans/${scanId}/latest-capture`);
+  }
+
+  async getScanSamples(scanId, params = {}) {
+    const query = new URLSearchParams(params).toString();
+    return this.request(`/scans/${scanId}/samples?${query}`);
   }
 
   // Mission Control

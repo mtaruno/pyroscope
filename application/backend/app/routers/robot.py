@@ -1,11 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
+from datetime import datetime
 from app.database import get_db
 from app.models.robot import RobotStatus
+from app.models.scan import ScanRecord
 from app.schemas.robot import RobotStatusCreate, RobotStatusResponse
 from app.schemas.response import RobotStatusResponse as RobotStatusCreateResponse
 from app.utils.validators import validate_operating_state
+from app.services.waypoint_capture_service import start_capture_loop, stop_capture_loop
 import subprocess
 import os
 import signal
@@ -58,8 +61,8 @@ class MissionConfig(BaseModel):
 
 
 @router.post("/mission/start")
-async def start_coverage_mission(config: MissionConfig = None):
-    """Start the lawnmower coverage mission"""
+async def start_coverage_mission(config: MissionConfig = None, db: Session = Depends(get_db)):
+    """Start the lawnmower coverage mission and waypoint capture loop."""
     global mission_process
 
     if mission_process is not None and mission_process.poll() is None:
@@ -69,6 +72,19 @@ async def start_coverage_mission(config: MissionConfig = None):
         )
 
     try:
+        # Create scan record (in progress) so we have scan_id for waypoint samples
+        scan = ScanRecord(
+            zone_id="A-01",
+            latitude=34.2257,
+            longitude=-117.8512,
+            scan_area="50 m × 50 m",
+            completed_at=None,
+        )
+        db.add(scan)
+        db.commit()
+        db.refresh(scan)
+        scan_id = scan.id
+
         # Build a clean env that removes the Python 3.9 venv but
         # keeps the normal system environment intact for ROS
         clean_env = {
@@ -96,17 +112,24 @@ async def start_coverage_mission(config: MissionConfig = None):
         )
         cmd = ['bash', '-c', ros_cmd]
 
-        # Start the mission as a background process
-        mission_process = subprocess.Popen(
-            cmd,
-            env=clean_env,
-            preexec_fn=os.setsid  # Create new process group
-        )
+        # Start the mission as a background process (may fail on non-ROS hosts; continue for capture)
+        try:
+            mission_process = subprocess.Popen(
+                cmd,
+                env=clean_env,
+                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+            )
+        except Exception:
+            mission_process = None  # noqa: PLW0602
+
+        # Start waypoint capture loop (3s interval: SHT40 + thermal, store samples)
+        start_capture_loop(scan_id)
 
         return {
             "status": "started",
             "message": "Coverage mission started successfully",
-            "pid": mission_process.pid,
+            "scan_id": scan_id,
+            "pid": mission_process.pid if mission_process else None,
             "config": config.dict() if config else {}
         }
 
@@ -118,42 +141,34 @@ async def start_coverage_mission(config: MissionConfig = None):
 
 
 @router.post("/mission/stop")
-async def stop_coverage_mission():
-    """Stop the running coverage mission"""
+async def stop_coverage_mission(db: Session = Depends(get_db)):
+    """Stop the running coverage mission and waypoint capture; mark scan completed."""
     global mission_process
 
-    if mission_process is None or mission_process.poll() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No mission is currently running"
-        )
+    # Stop waypoint capture loop and get scan_id to complete
+    stopped_scan_id = stop_capture_loop()
 
-    try:
-        # Kill the entire process group
-        os.killpg(os.getpgid(mission_process.pid), signal.SIGTERM)
+    if mission_process is not None and mission_process.poll() is None:
+        try:
+            os.killpg(os.getpgid(mission_process.pid), signal.SIGTERM)
+            mission_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            os.killpg(os.getpgid(mission_process.pid), signal.SIGKILL)
+        except Exception:
+            pass
+        mission_process = None  # noqa: PLW0602
 
-        # Wait for process to terminate
-        mission_process.wait(timeout=5)
-        mission_process = None
+    if stopped_scan_id:
+        scan = db.query(ScanRecord).filter(ScanRecord.id == stopped_scan_id).first()
+        if scan and scan.completed_at is None:
+            scan.completed_at = datetime.utcnow()
+            db.commit()
 
-        return {
-            "status": "stopped",
-            "message": "Coverage mission stopped successfully"
-        }
-
-    except subprocess.TimeoutExpired:
-        # Force kill if it doesn't stop gracefully
-        os.killpg(os.getpgid(mission_process.pid), signal.SIGKILL)
-        mission_process = None
-        return {
-            "status": "force_stopped",
-            "message": "Coverage mission force stopped"
-        }
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to stop mission: {str(e)}"
-        )
+    return {
+        "status": "stopped",
+        "message": "Coverage mission stopped successfully",
+        "scan_id": stopped_scan_id,
+    }
 
 
 @router.get("/mission/status")

@@ -1,0 +1,24 @@
+<launch>
+  <!-- Pyroscope repo root (contains sht40_reader.py, thermal_capture.py). From share/pyroscope_sensors, 4 levels up = repo root. -->
+  <arg name="pyroscope_root" default="$(find pyroscope_sensors)/../../../../"/>
+  <arg name="sht40_rate" default="1.0"/>
+  <arg name="sht40_bus" default="1"/>
+  <arg name="sht40_simulate" default="false"/>
+  <arg name="thermal_rate" default="0.33"/>
+  <arg name="thermal_publish_image" default="true"/>
+  <arg name="thermal_simulate" default="false"/>
+
+  <node pkg="pyroscope_sensors" type="sht40_node.py" name="sht40_node" output="screen">
+    <param name="pyroscope_root" value="$(arg pyroscope_root)"/>
+    <param name="rate" value="$(arg sht40_rate)"/>
+    <param name="bus" value="$(arg sht40_bus)"/>
+    <param name="simulate" value="$(arg sht40_simulate)"/>
+  </node>
+
+  <node pkg="pyroscope_sensors" type="thermal_node.py" name="thermal_node" output="screen">
+    <param name="pyroscope_root" value="$(arg pyroscope_root)"/>
+    <param name="rate" value="$(arg thermal_rate)"/>
+    <param name="publish_image" value="$(arg thermal_publish_image)"/>
+    <param name="simulate" value="$(arg thermal_simulate)"/>
+  </node>
+</launch>

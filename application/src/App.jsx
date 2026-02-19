@@ -58,6 +58,9 @@ function App() {
   const [showResults, setShowResults] = useState(false)
   const [scanResultData, setScanResultData] = useState(null)
   const scanIntervalRef = useRef(null)
+  const [activeScanId, setActiveScanId] = useState(null)
+  const [latestCapture, setLatestCapture] = useState(null)
+  const latestCapturePollRef = useRef(null)
 
   // Load scans from API on component mount
   useEffect(() => {
@@ -209,69 +212,45 @@ function App() {
             setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
             setScanPhase('Scan complete!')
 
-            // Generate scan results and upload to backend
+            const currentScanId = activeScanId
+            setActiveScanId(null)
+            setLatestCapture(null)
+
             setTimeout(async () => {
-              const now = new Date()
-              const scanData = {
-                zoneId: locationData.zoneName.split(' ').pop() || 'A-01',
-                location: locationData.zoneName,
-                areaSize: scanConfig.scanArea,
-                duration: '15 min 32 sec',
-                completedAt: now.toLocaleDateString('en-GB', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric'
-                }) + ' ' + now.toLocaleTimeString('en-GB', {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                }),
-                riskLevel: 'High',
-                avgPlantTemp: 33.0,
-                avgAirTemp: 29.3,
-                tempDiff: 3.7,
-                fuelLoad: 'High',
-                fuelDensity: 0.78,
-                biomass: 1.9,
-                recommendations: [
-                  'Action required',
-                  'Inspect area immediately',
-                  'Check for pests or drought'
-                ],
-                latitude: scanTarget.lat.toFixed(6),
-                longitude: scanTarget.lng.toFixed(6)
-              }
-
-              // Upload scan to backend
-              try {
-                const uploadData = {
-                  zone_id: scanData.zoneId,
-                  latitude: scanTarget.lat,
-                  longitude: scanTarget.lng,
-                  gps_accuracy: locationData.gpsAccuracy,
-                  scan_area: scanData.areaSize,
-                  duration: scanData.duration,
-                  risk_level: scanData.riskLevel.toLowerCase(),
-                  avg_plant_temp: scanData.avgPlantTemp,
-                  avg_air_temp: scanData.avgAirTemp,
-                  avg_humidity: environmentalData.airHumidity,
-                  wind_speed: environmentalData.windSpeed,
-                  temp_diff: scanData.tempDiff,
-                  fuel_load: scanData.fuelLoad,
-                  fuel_density: scanData.fuelDensity,
-                  biomass: scanData.biomass,
-                  robot_id: 'ROBOT-001',
-                  completed_at: now.toISOString()
-                }
-
-                const response = await apiClient.createScan(uploadData)
-                console.log('Scan uploaded successfully:', response)
-
-                // Reload scans to show the new one
-                setTimeout(() => {
-                  // Trigger a reload by calling the API
-                  apiClient.getScans({ limit: 50 }).then(response => {
-                    if (response && response.scans) {
-                      const markers = response.scans.map(scan => ({
+              if (currentScanId) {
+                try {
+                  const scanDetail = await apiClient.getScanDetail(currentScanId).catch(() => null)
+                  if (scanDetail) {
+                    const data = {
+                      id: scanDetail.id,
+                      zoneId: scanDetail.zone_id || 'Unknown',
+                      location: `Area ${scanDetail.zone_id}`,
+                      areaSize: scanDetail.scan_area || '50 m × 50 m',
+                      duration: scanDetail.duration || 'N/A',
+                      completedAt: scanDetail.completed_at ? new Date(scanDetail.completed_at).toLocaleString() : 'N/A',
+                      riskLevel: (scanDetail.risk_level || 'medium').charAt(0).toUpperCase() + (scanDetail.risk_level || '').slice(1),
+                      avgPlantTemp: scanDetail.avg_plant_temp || 0,
+                      avgAirTemp: scanDetail.avg_air_temp || 0,
+                      tempDiff: scanDetail.temp_diff || 0,
+                      fuel_load: scanDetail.fuel_load,
+                      one_hour_fuel: scanDetail.one_hour_fuel,
+                      ten_hour_fuel: scanDetail.ten_hour_fuel,
+                      hundred_hour_fuel: scanDetail.hundred_hour_fuel,
+                      pine_cone_count: scanDetail.pine_cone_count,
+                      fuelLoad: scanDetail.fuel_load || 'Unknown',
+                      fuelDensity: scanDetail.fuel_density || 0,
+                      biomass: scanDetail.biomass || 0,
+                      recommendations: ['View detailed analysis', 'Check environmental data', 'Review scan images'],
+                      latitude: scanDetail.latitude != null ? String(scanDetail.latitude) : '0',
+                      longitude: scanDetail.longitude != null ? String(scanDetail.longitude) : '0',
+                      images: scanDetail.images || []
+                    }
+                    setScanResultData(data)
+                    setShowResults(true)
+                  }
+                  apiClient.getScans({ limit: 50 }).then(res => {
+                    if (res?.scans) {
+                      const markers = res.scans.map(scan => ({
                         id: scan.id,
                         lat: scan.latitude,
                         lng: scan.longitude,
@@ -289,25 +268,18 @@ function App() {
                           fuelLoad: scan.fuel_load || 'Unknown',
                           fuelDensity: scan.fuel_density || 0,
                           biomass: scan.biomass || 0,
-                          recommendations: [
-                            'View detailed analysis',
-                            'Check environmental data',
-                            'Review scan images'
-                          ],
-                          latitude: scan.latitude.toFixed(6),
-                          longitude: scan.longitude.toFixed(6)
+                          recommendations: ['View detailed analysis', 'Check environmental data', 'Review scan images'],
+                          latitude: String(scan.latitude),
+                          longitude: String(scan.longitude)
                         }
                       }))
                       setMapMarkers(markers)
                     }
                   }).catch(err => console.error('Failed to reload scans:', err))
-                }, 2000)
-              } catch (error) {
-                console.error('Failed to upload scan:', error)
+                } catch (error) {
+                  console.error('Failed to load scan result:', error)
+                }
               }
-
-              setScanResultData(scanData)
-              setShowResults(true)
             }, 1000)
 
             return 100
@@ -322,7 +294,31 @@ function App() {
         clearInterval(scanIntervalRef.current)
       }
     }
-  }, [isScanning, isPaused])
+  }, [isScanning, isPaused, activeScanId])
+
+  // Poll latest waypoint capture while scanning
+  useEffect(() => {
+    if (!isScanning || !activeScanId) {
+      if (latestCapturePollRef.current) {
+        clearInterval(latestCapturePollRef.current)
+        latestCapturePollRef.current = null
+      }
+      return
+    }
+    const poll = async () => {
+      try {
+        const data = await apiClient.getLatestCapture(activeScanId)
+        setLatestCapture(data)
+      } catch (e) {
+        console.error('Latest capture poll failed:', e)
+      }
+    }
+    poll()
+    latestCapturePollRef.current = setInterval(poll, 2000)
+    return () => {
+      if (latestCapturePollRef.current) clearInterval(latestCapturePollRef.current)
+    }
+  }, [isScanning, activeScanId])
 
   const handleStartScan = async () => {
     try {
@@ -336,8 +332,11 @@ function App() {
         dwell_time: 2.0,
         waypoint_timeout: 30.0
       }
-      await apiClient.startCoverageMission(missionConfig)
-      console.log('Coverage mission started on robot')
+      const response = await apiClient.startCoverageMission(missionConfig)
+      const scanId = response?.scan_id ?? null
+      if (scanId) setActiveScanId(scanId)
+      setLatestCapture(null)
+      console.log('Coverage mission started on robot', scanId ? `scan_id=${scanId}` : '')
     } catch (error) {
       console.error('Failed to start coverage mission:', error)
       alert(`Failed to start mission: ${error.message}`)
@@ -378,6 +377,43 @@ function App() {
     setScanProgress(0)
     setScanPhase('')
     setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
+    if (activeScanId) {
+      try {
+        const scanDetail = await apiClient.getScanDetail(activeScanId).catch(() => null)
+        if (scanDetail) {
+          const data = {
+            id: scanDetail.id,
+            zoneId: scanDetail.zone_id || 'Unknown',
+            location: `Area ${scanDetail.zone_id}`,
+            areaSize: scanDetail.scan_area || '50 m × 50 m',
+            duration: scanDetail.duration || 'N/A',
+            completedAt: scanDetail.completed_at ? new Date(scanDetail.completed_at).toLocaleString() : 'N/A',
+            riskLevel: (scanDetail.risk_level || 'medium').charAt(0).toUpperCase() + (scanDetail.risk_level || '').slice(1),
+            avgPlantTemp: scanDetail.avg_plant_temp || 0,
+            avgAirTemp: scanDetail.avg_air_temp || 0,
+            tempDiff: scanDetail.temp_diff || 0,
+            fuel_load: scanDetail.fuel_load,
+            one_hour_fuel: scanDetail.one_hour_fuel,
+            ten_hour_fuel: scanDetail.ten_hour_fuel,
+            hundred_hour_fuel: scanDetail.hundred_hour_fuel,
+            pine_cone_count: scanDetail.pine_cone_count,
+            fuelLoad: scanDetail.fuel_load || 'Unknown',
+            fuelDensity: scanDetail.fuel_density || 0,
+            biomass: scanDetail.biomass || 0,
+            recommendations: ['View detailed analysis', 'Check environmental data', 'Review scan images'],
+            latitude: scanDetail.latitude != null ? String(scanDetail.latitude) : '0',
+            longitude: scanDetail.longitude != null ? String(scanDetail.longitude) : '0',
+            images: scanDetail.images || []
+          }
+          setScanResultData(data)
+          setShowResults(true)
+        }
+      } catch (e) {
+        console.error('Failed to load scan after stop:', e)
+      }
+      setActiveScanId(null)
+      setLatestCapture(null)
+    }
   }
 
   // Handle boundary update when location is refreshed
@@ -394,6 +430,8 @@ function App() {
     setShowResults(false)
     setScanProgress(0)
     setScanPhase('')
+    setActiveScanId(null)
+    setLatestCapture(null)
   }
 
   // Handle clicking on a history marker to view its scan results
@@ -482,6 +520,41 @@ function App() {
           onScanTargetChange={handleScanTargetChange}
           onMarkerClick={handleMarkerClick}
         />
+        {isScanning && (
+          <section className="latest-capture-panel" aria-label="Latest capture">
+            <h3 className="latest-capture-title">Latest capture</h3>
+            <div className="latest-capture-content">
+              {latestCapture?.thermal_image_url && (
+                <div className="latest-capture-image-wrap">
+                  <img
+                    src={apiClient.getBaseUrl() + latestCapture.thermal_image_url}
+                    alt="Latest thermal"
+                    className="latest-capture-image"
+                  />
+                </div>
+              )}
+              <div className="latest-capture-fields">
+                {latestCapture?.captured_at != null && (
+                  <p className="latest-capture-time">
+                    {new Date(latestCapture.captured_at).toLocaleString()}
+                  </p>
+                )}
+                {latestCapture?.air_temperature != null && (
+                  <p>Air temp: <strong>{latestCapture.air_temperature} °C</strong></p>
+                )}
+                {latestCapture?.air_humidity != null && (
+                  <p>Humidity: <strong>{latestCapture.air_humidity} %</strong></p>
+                )}
+                {latestCapture?.thermal_mean != null && (
+                  <p>Thermal mean: <strong>{latestCapture.thermal_mean} °C</strong></p>
+                )}
+                {!latestCapture?.captured_at && activeScanId && (
+                  <p className="latest-capture-wait">Waiting for first capture…</p>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
         <DataLog logs={scanLogs} />
       </main>
     </div>

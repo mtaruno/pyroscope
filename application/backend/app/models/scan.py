@@ -37,6 +37,7 @@ class ScanRecord(Base):
     # Relationships
     environmental_data = relationship("EnvironmentalData", back_populates="scan", cascade="all, delete-orphan")
     images = relationship("ScanImage", back_populates="scan", cascade="all, delete-orphan")
+    waypoint_samples = relationship("ScanWaypointSample", back_populates="scan", cascade="all, delete-orphan")
     
     __table_args__ = (
         Index('idx_location', 'latitude', 'longitude'),

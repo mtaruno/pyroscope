@@ -98,3 +98,29 @@ class ScanListItem(BaseModel):
 class ScanListResponse(BaseModel):
     total: int
     scans: List[ScanListItem]
+
+
+class LatestCaptureResponse(BaseModel):
+    """Latest waypoint capture for a scan: sample data + thermal image URL."""
+    air_temperature: Optional[float] = None
+    air_humidity: Optional[float] = None
+    thermal_mean: Optional[float] = None
+    captured_at: Optional[datetime] = None
+    thermal_image_url: Optional[str] = None
+
+
+class WaypointSampleItem(BaseModel):
+    sequence_index: int
+    captured_at: Optional[datetime] = None
+    air_temperature: Optional[float] = None
+    air_humidity: Optional[float] = None
+    thermal_mean: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ScanSamplesResponse(BaseModel):
+    scan_id: int
+    total: int
+    samples: List[WaypointSampleItem]

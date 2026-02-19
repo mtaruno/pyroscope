@@ -2,7 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import Optional
 from app.database import get_db
-from app.schemas.scan import ScanCreate, ScanResponse, ScanListResponse, ScanListItem, ImageInfo
+from app.schemas.scan import (
+    ScanCreate,
+    ScanResponse,
+    ScanListResponse,
+    ScanListItem,
+    ImageInfo,
+    LatestCaptureResponse,
+    WaypointSampleItem,
+    ScanSamplesResponse,
+)
 from app.schemas.response import ScanCreateResponse
 from app.schemas.heatmap import HeatmapDataResponse, HeatmapPoint
 from app.services.scan_service import ScanService
@@ -10,6 +19,8 @@ from app.services.fire_risk_service import FireRiskService
 from app.utils.validators import validate_risk_level
 from app.models.scan import ScanRecord
 from app.models.environmental import EnvironmentalData
+from app.models.waypoint_sample import ScanWaypointSample
+from app.models.image import ScanImage, ImageType
 
 router = APIRouter(prefix="/scans", tags=["Scans"])
 
@@ -107,6 +118,68 @@ async def get_scan_detail(scan_id: int, db: Session = Depends(get_db)):
         created_at=scan.created_at,
         images=image_infos
     )
+
+
+@router.get("/{scan_id}/latest-capture", response_model=LatestCaptureResponse)
+async def get_latest_capture(scan_id: int, db: Session = Depends(get_db)):
+    """Get the latest waypoint capture for a scan (sample + thermal image URL)."""
+    scan = db.query(ScanRecord).filter(ScanRecord.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+    latest = (
+        db.query(ScanWaypointSample)
+        .filter(ScanWaypointSample.scan_id == scan_id)
+        .order_by(ScanWaypointSample.sequence_index.desc())
+        .first()
+    )
+    thermal_img = (
+        db.query(ScanImage)
+        .filter(ScanImage.scan_id == scan_id, ScanImage.image_type == ImageType.thermal_latest)
+        .first()
+    )
+    thermal_url = f"/api/images/{thermal_img.id}" if thermal_img else None
+    if not latest:
+        return LatestCaptureResponse(thermal_image_url=thermal_url)
+    return LatestCaptureResponse(
+        air_temperature=float(latest.air_temperature) if latest.air_temperature is not None else None,
+        air_humidity=float(latest.air_humidity) if latest.air_humidity is not None else None,
+        thermal_mean=float(latest.thermal_mean) if latest.thermal_mean is not None else None,
+        captured_at=latest.captured_at,
+        thermal_image_url=thermal_url,
+    )
+
+
+@router.get("/{scan_id}/samples", response_model=ScanSamplesResponse)
+async def get_scan_samples(
+    scan_id: int,
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """Get all waypoint samples for a scan (paginated)."""
+    scan = db.query(ScanRecord).filter(ScanRecord.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+    total = db.query(ScanWaypointSample).filter(ScanWaypointSample.scan_id == scan_id).count()
+    rows = (
+        db.query(ScanWaypointSample)
+        .filter(ScanWaypointSample.scan_id == scan_id)
+        .order_by(ScanWaypointSample.sequence_index)
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    samples = [
+        WaypointSampleItem(
+            sequence_index=r.sequence_index,
+            captured_at=r.captured_at,
+            air_temperature=float(r.air_temperature) if r.air_temperature is not None else None,
+            air_humidity=float(r.air_humidity) if r.air_humidity is not None else None,
+            thermal_mean=float(r.thermal_mean) if r.thermal_mean is not None else None,
+        )
+        for r in rows
+    ]
+    return ScanSamplesResponse(scan_id=scan_id, total=total, samples=samples)
 
 
 @router.get("/{scan_id}/heatmap-data", response_model=HeatmapDataResponse)

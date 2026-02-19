@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 import json
 
 
@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     
     # CORS Configuration
     CORS_ORIGINS: str = '["http://localhost:5173"]'
+
+    # ROS (optional): when set, backend subscribes to sensor topics on Jetson instead of subprocess
+    # On PC: set ROS_MASTER_URI=http://<JETSON_IP>:11311 and ROS_IP=<PC_IP> (e.g. in .env)
+    ROS_MASTER_URI: Optional[str] = ""
+    ROS_IP: Optional[str] = ""
     
     @property
     def cors_origins_list(self) -> List[str]:

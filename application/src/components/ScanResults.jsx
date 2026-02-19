@@ -10,7 +10,10 @@ function ScanResults({ scanData, onBack }) {
   const [pointData, setPointData] = useState(null)
   const [showPointData, setShowPointData] = useState(false)
   const [loadingPoints, setLoadingPoints] = useState(false)
-  
+  const [samplesData, setSamplesData] = useState(null)
+  const [showSamples, setShowSamples] = useState(false)
+  const [loadingSamples, setLoadingSamples] = useState(false)
+
   // Load point-level data when toggled
   useEffect(() => {
     const loadPointData = async () => {
@@ -28,6 +31,24 @@ function ScanResults({ scanData, onBack }) {
     }
     loadPointData()
   }, [showPointData, scanId, pointData])
+
+  // Load waypoint samples when toggled
+  useEffect(() => {
+    const loadSamples = async () => {
+      if (showSamples && !samplesData && scanId) {
+        setLoadingSamples(true)
+        try {
+          const data = await apiClient.getScanSamples(scanId, { limit: 200 })
+          setSamplesData(data)
+        } catch (error) {
+          console.error('Failed to load waypoint samples:', error)
+        } finally {
+          setLoadingSamples(false)
+        }
+      }
+    }
+    loadSamples()
+  }, [showSamples, scanId, samplesData])
   return (
     <div className="scan-results">
       {/* Header */}
@@ -217,6 +238,57 @@ function ScanResults({ scanData, onBack }) {
                 <span className="results-value mono">{scanData.longitude}</span>
               </div>
             </div>
+          </section>
+
+          {/* Waypoint samples (SHT40 + thermal per waypoint) */}
+          <section className="results-section">
+            <button
+              className="point-data-toggle"
+              onClick={() => setShowSamples(!showSamples)}
+            >
+              <div className="point-data-toggle-header">
+                <Thermometer size={16} />
+                <span>Waypoint samples</span>
+              </div>
+              {showSamples ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+            {showSamples && (
+              <div className="point-data-container">
+                {loadingSamples ? (
+                  <div className="point-data-loading">Loading samples...</div>
+                ) : samplesData && samplesData.samples?.length > 0 ? (
+                  <div className="point-data-table-wrapper">
+                    <div className="point-data-count">
+                      {samplesData.total} waypoint sample(s)
+                    </div>
+                    <table className="point-data-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Time</th>
+                          <th>Air T°</th>
+                          <th>Humidity</th>
+                          <th>Thermal mean</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {samplesData.samples.map((s, index) => (
+                          <tr key={s.sequence_index}>
+                            <td>{s.sequence_index + 1}</td>
+                            <td>{s.captured_at ? new Date(s.captured_at).toLocaleString() : '-'}</td>
+                            <td>{s.air_temperature != null ? `${s.air_temperature.toFixed(1)} °C` : '-'}</td>
+                            <td>{s.air_humidity != null ? `${s.air_humidity.toFixed(0)} %` : '-'}</td>
+                            <td>{s.thermal_mean != null ? `${s.thermal_mean.toFixed(1)} °C` : '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="point-data-empty">No waypoint samples for this scan</div>
+                )}
+              </div>
+            )}
           </section>
 
           {/* Point-Level Data */}

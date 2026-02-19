@@ -7,6 +7,7 @@ import enum
 
 class ImageType(str, enum.Enum):
     thermal = "thermal"
+    thermal_latest = "thermal_latest"
     visible = "visible"
     panorama = "panorama"
     detail = "detail"

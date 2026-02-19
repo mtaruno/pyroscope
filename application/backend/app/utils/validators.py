@@ -19,7 +19,7 @@ def validate_risk_level(risk_level: Optional[str]) -> Optional[str]:
 
 def validate_image_type(image_type: str) -> str:
     """Validate image type value"""
-    valid_types = ["thermal", "visible", "panorama", "detail"]
+    valid_types = ["thermal", "thermal_latest", "visible", "panorama", "detail"]
     if image_type.lower() not in valid_types:
         raise HTTPException(
             status_code=400,
