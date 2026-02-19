@@ -265,6 +265,7 @@ function ScanResults({ scanData, onBack }) {
                       <thead>
                         <tr>
                           <th>#</th>
+                          <th>RGB</th>
                           <th>Time</th>
                           <th>Air T°</th>
                           <th>Humidity</th>
@@ -272,9 +273,20 @@ function ScanResults({ scanData, onBack }) {
                         </tr>
                       </thead>
                       <tbody>
-                        {samplesData.samples.map((s, index) => (
+                        {samplesData.samples.map((s) => (
                           <tr key={s.sequence_index}>
                             <td>{s.sequence_index + 1}</td>
+                            <td>
+                              {s.rgb_image_url ? (
+                                <a href={apiClient.getBaseUrl() + s.rgb_image_url} target="_blank" rel="noreferrer">
+                                  <img
+                                    src={apiClient.getBaseUrl() + s.rgb_image_url}
+                                    alt={`wp-${s.sequence_index}`}
+                                    className="waypoint-rgb-thumb"
+                                  />
+                                </a>
+                              ) : '-'}
+                            </td>
                             <td>{s.captured_at ? new Date(s.captured_at).toLocaleString() : '-'}</td>
                             <td>{s.air_temperature != null ? `${s.air_temperature.toFixed(1)} °C` : '-'}</td>
                             <td>{s.air_humidity != null ? `${s.air_humidity.toFixed(0)} %` : '-'}</td>

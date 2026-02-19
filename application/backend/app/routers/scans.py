@@ -122,7 +122,7 @@ async def get_scan_detail(scan_id: int, db: Session = Depends(get_db)):
 
 @router.get("/{scan_id}/latest-capture", response_model=LatestCaptureResponse)
 async def get_latest_capture(scan_id: int, db: Session = Depends(get_db)):
-    """Get the latest waypoint capture for a scan (sample + thermal image URL)."""
+    """Get the latest waypoint capture for a scan (sample data + thermal + RGB image URLs)."""
     scan = db.query(ScanRecord).filter(ScanRecord.id == scan_id).first()
     if not scan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
@@ -138,6 +138,7 @@ async def get_latest_capture(scan_id: int, db: Session = Depends(get_db)):
         .first()
     )
     thermal_url = f"/api/images/{thermal_img.id}" if thermal_img else None
+    rgb_url = f"/api/images/{latest.rgb_image_id}" if latest and latest.rgb_image_id else None
     if not latest:
         return LatestCaptureResponse(thermal_image_url=thermal_url)
     return LatestCaptureResponse(
@@ -146,6 +147,7 @@ async def get_latest_capture(scan_id: int, db: Session = Depends(get_db)):
         thermal_mean=float(latest.thermal_mean) if latest.thermal_mean is not None else None,
         captured_at=latest.captured_at,
         thermal_image_url=thermal_url,
+        rgb_image_url=rgb_url,
     )
 
 
@@ -176,6 +178,7 @@ async def get_scan_samples(
             air_temperature=float(r.air_temperature) if r.air_temperature is not None else None,
             air_humidity=float(r.air_humidity) if r.air_humidity is not None else None,
             thermal_mean=float(r.thermal_mean) if r.thermal_mean is not None else None,
+            rgb_image_url=f"/api/images/{r.rgb_image_id}" if r.rgb_image_id else None,
         )
         for r in rows
     ]

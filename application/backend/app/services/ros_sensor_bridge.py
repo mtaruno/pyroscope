@@ -1,6 +1,11 @@
 """
-ROS subscriber bridge: subscribe to /sensors/sht40/* and /sensors/thermal/* on Jetson,
-cache latest values so waypoint_capture_service can read them (no subprocess).
+ROS subscriber bridge: subscribe to sensor topics on Jetson, cache latest values.
+Subscribed topics:
+  /sensors/sht40/temperature   (std_msgs/Float64)
+  /sensors/sht40/humidity      (std_msgs/Float64)
+  /sensors/thermal/mean        (std_msgs/Float64)
+  /sensors/thermal/image       (sensor_msgs/Image)
+  /camera/color/image_raw      (sensor_msgs/Image)  -- RealSense D435i RGB
 Run only when ROS_MASTER_URI is set; runs in a background thread.
 """
 
@@ -13,13 +18,14 @@ _ros_cache: Dict[str, Any] = {
     "humidity": None,
     "thermal_mean": None,
     "thermal_image_path": None,
+    "rgb_image_path": None,
     "lock": threading.Lock(),
 }
 _ros_thread: Optional[threading.Thread] = None
 _ros_stop = threading.Event()
 
 
-def _ros_subscriber_thread(thermal_image_save_dir: str):
+def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str):
     """Run rospy node and subscribe to sensor topics; update _ros_cache."""
     try:
         import rospy
@@ -62,12 +68,29 @@ def _ros_subscriber_thread(thermal_image_save_dir: str):
         except Exception:
             pass
 
+    def cb_rgb_image(msg):
+        """Cache latest RealSense D435i color frame as JPEG."""
+        if not bridge:
+            return
+        try:
+            import cv2
+            # RealSense publishes BGR8; convert directly to JPEG
+            cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
+            if cv_img is not None:
+                path = os.path.join(rgb_image_save_dir, "ros_latest.jpg")
+                cv2.imwrite(path, cv_img)
+                with _ros_cache["lock"]:
+                    _ros_cache["rgb_image_path"] = path
+        except Exception:
+            pass
+
     rospy.init_node("waypoint_capture_bridge", anonymous=True, disable_signals=True)
     rospy.Subscriber("/sensors/sht40/temperature", Float64, cb_temp, queue_size=1)
     rospy.Subscriber("/sensors/sht40/humidity", Float64, cb_hum, queue_size=1)
     rospy.Subscriber("/sensors/thermal/mean", Float64, cb_thermal_mean, queue_size=1)
     if bridge:
         rospy.Subscriber("/sensors/thermal/image", Image, cb_thermal_image, queue_size=1)
+        rospy.Subscriber("/camera/color/image_raw", Image, cb_rgb_image, queue_size=1)
 
     rate = rospy.Rate(2)
     while not _ros_stop.is_set() and not rospy.is_shutdown():
@@ -75,7 +98,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str):
     rospy.signal_shutdown("bridge stop")
 
 
-def start_ros_bridge(thermal_image_save_dir: str) -> bool:
+def start_ros_bridge(thermal_image_save_dir: str, rgb_image_save_dir: str) -> bool:
     """Start the ROS subscriber thread if ROS_MASTER_URI is set. Return True if using ROS."""
     global _ros_thread
     from app.config import settings
@@ -90,7 +113,7 @@ def start_ros_bridge(thermal_image_save_dir: str) -> bool:
     _ros_stop.clear()
     _ros_thread = threading.Thread(
         target=_ros_subscriber_thread,
-        args=(thermal_image_save_dir,),
+        args=(thermal_image_save_dir, rgb_image_save_dir),
         daemon=True,
     )
     _ros_thread.start()
@@ -106,13 +129,14 @@ def stop_ros_bridge():
 
 
 def get_latest_from_ros() -> Dict[str, Any]:
-    """Return latest cached sensor values from ROS (temperature, humidity, thermal_mean, thermal_image_path)."""
+    """Return latest cached sensor values from ROS."""
     with _ros_cache["lock"]:
         return {
             "temperature": _ros_cache["temperature"],
             "humidity": _ros_cache["humidity"],
             "thermal_mean": _ros_cache["thermal_mean"],
             "thermal_image_path": _ros_cache["thermal_image_path"],
+            "rgb_image_path": _ros_cache["rgb_image_path"],
         }
 
 

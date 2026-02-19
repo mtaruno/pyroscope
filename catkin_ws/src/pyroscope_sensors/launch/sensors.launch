@@ -8,6 +8,13 @@
   <arg name="thermal_publish_image" default="true"/>
   <arg name="thermal_simulate" default="false"/>
 
+  <!-- RealSense D435i: set to false to disable (e.g., camera not connected) -->
+  <arg name="realsense_enabled" default="true"/>
+  <!-- Color stream resolution and FPS (lower values reduce bandwidth on the ROS network) -->
+  <arg name="realsense_width"   default="640"/>
+  <arg name="realsense_height"  default="480"/>
+  <arg name="realsense_fps"     default="6"/>
+
   <node pkg="pyroscope_sensors" type="sht40_node.py" name="sht40_node" output="screen">
     <param name="pyroscope_root" value="$(arg pyroscope_root)"/>
     <param name="rate" value="$(arg sht40_rate)"/>
@@ -21,4 +28,18 @@
     <param name="publish_image" value="$(arg thermal_publish_image)"/>
     <param name="simulate" value="$(arg thermal_simulate)"/>
   </node>
+
+  <!-- RealSense D435i RGB stream (realsense2_camera package required on Jetson) -->
+  <!-- Topic published: /camera/color/image_raw (sensor_msgs/Image, BGR8) -->
+  <group if="$(arg realsense_enabled)">
+    <include file="$(find realsense2_camera)/launch/rs_camera.launch">
+      <arg name="enable_color"   value="true"/>
+      <arg name="enable_depth"   value="false"/>
+      <arg name="enable_infra1"  value="false"/>
+      <arg name="enable_infra2"  value="false"/>
+      <arg name="color_width"    value="$(arg realsense_width)"/>
+      <arg name="color_height"   value="$(arg realsense_height)"/>
+      <arg name="color_fps"      value="$(arg realsense_fps)"/>
+    </include>
+  </group>
 </launch>

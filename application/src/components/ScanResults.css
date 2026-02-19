@@ -450,3 +450,17 @@
   }
 }
 
+.waypoint-rgb-thumb {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 3px;
+  display: block;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.waypoint-rgb-thumb:hover {
+  opacity: 0.8;
+}
+

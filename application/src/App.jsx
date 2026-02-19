@@ -524,8 +524,19 @@ function App() {
           <section className="latest-capture-panel" aria-label="Latest capture">
             <h3 className="latest-capture-title">Latest capture</h3>
             <div className="latest-capture-content">
+              {latestCapture?.rgb_image_url && (
+                <div className="latest-capture-image-wrap">
+                  <p className="latest-capture-img-label">RGB (RealSense)</p>
+                  <img
+                    src={apiClient.getBaseUrl() + latestCapture.rgb_image_url}
+                    alt="Latest RGB"
+                    className="latest-capture-image"
+                  />
+                </div>
+              )}
               {latestCapture?.thermal_image_url && (
                 <div className="latest-capture-image-wrap">
+                  <p className="latest-capture-img-label">Thermal</p>
                   <img
                     src={apiClient.getBaseUrl() + latestCapture.thermal_image_url}
                     alt="Latest thermal"

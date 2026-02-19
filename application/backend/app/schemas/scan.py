@@ -101,12 +101,13 @@ class ScanListResponse(BaseModel):
 
 
 class LatestCaptureResponse(BaseModel):
-    """Latest waypoint capture for a scan: sample data + thermal image URL."""
+    """Latest waypoint capture for a scan: sample data + image URLs."""
     air_temperature: Optional[float] = None
     air_humidity: Optional[float] = None
     thermal_mean: Optional[float] = None
     captured_at: Optional[datetime] = None
     thermal_image_url: Optional[str] = None
+    rgb_image_url: Optional[str] = None
 
 
 class WaypointSampleItem(BaseModel):
@@ -115,6 +116,7 @@ class WaypointSampleItem(BaseModel):
     air_temperature: Optional[float] = None
     air_humidity: Optional[float] = None
     thermal_mean: Optional[float] = None
+    rgb_image_url: Optional[str] = None
 
     class Config:
         from_attributes = True

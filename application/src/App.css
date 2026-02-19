@@ -40,6 +40,14 @@
   flex-shrink: 0;
 }
 
+.latest-capture-img-label {
+  margin: 0 0 4px 0;
+  font-size: 0.78rem;
+  opacity: 0.7;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
 .latest-capture-image {
   max-width: 280px;
   max-height: 200px;
