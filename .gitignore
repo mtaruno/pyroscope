@@ -1,0 +1,13 @@
+# Catkin build artifacts (catkin_make)
+catkin_ws/build/
+catkin_ws/devel/
+build/
+devel/
+.catkin_workspace
+*.pyc
+__pycache__/
+
+# IDE / OS
+.idea/
+*.swp
+.DS_Store

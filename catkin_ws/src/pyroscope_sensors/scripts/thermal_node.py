@@ -30,6 +30,8 @@ def _add_pyroscope_path():
     if root and root not in sys.path:
         sys.path.insert(0, root)
 
+# Must init_node first so that ~pyroscope_root param is resolvable (launch sets /thermal_node/pyroscope_root)
+rospy.init_node("thermal_node", anonymous=False)
 _add_pyroscope_path()
 
 try:
@@ -40,7 +42,6 @@ except ImportError as e:
 
 
 def main():
-    rospy.init_node("thermal_node", anonymous=False)
     rate_hz = rospy.get_param("~rate", 0.33)  # ~every 3 s
     publish_image = rospy.get_param("~publish_image", True)
     simulate = rospy.get_param("~simulate", False)

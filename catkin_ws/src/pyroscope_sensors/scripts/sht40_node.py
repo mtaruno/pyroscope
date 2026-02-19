@@ -26,6 +26,8 @@ def _add_pyroscope_path():
     if root and root not in sys.path:
         sys.path.insert(0, root)
 
+# Must init_node first so that ~pyroscope_root param is resolvable (launch sets /sht40_node/pyroscope_root)
+rospy.init_node("sht40_node", anonymous=False)
 _add_pyroscope_path()
 
 try:
@@ -36,7 +38,6 @@ except ImportError as e:
 
 
 def main():
-    rospy.init_node("sht40_node", anonymous=False)
     rate_hz = rospy.get_param("~rate", 1.0)
     bus_num = rospy.get_param("~bus", 1)
     simulate = rospy.get_param("~simulate", False)
