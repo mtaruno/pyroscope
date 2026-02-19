@@ -3,6 +3,7 @@ import Sidebar from './components/Sidebar'
 import MapView from './components/MapView'
 import DataLog from './components/DataLog'
 import ScanResults from './components/ScanResults'
+import SensorPanel from './components/SensorPanel'
 import apiClient from './services/api'
 import './App.css'
 
@@ -534,6 +535,7 @@ function App() {
           onScanTargetChange={handleScanTargetChange}
           onMarkerClick={handleMarkerClick}
         />
+        <SensorPanel />
         {isScanning && (
           <section className="latest-capture-panel" aria-label="Latest capture">
             <h3 className="latest-capture-title">Latest capture</h3>

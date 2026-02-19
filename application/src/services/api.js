@@ -134,6 +134,19 @@ class ApiClient {
   async getMissionStatus() {
     return this.request('/robot/mission/status');
   }
+
+  // Real-time Sensors
+  async getLatestSensors() {
+    return this.request('/sensors/latest');
+  }
+
+  getThermalImageUrl() {
+    return `${API_BASE_URL}/sensors/thermal/image?t=${Date.now()}`;
+  }
+
+  getRgbImageUrl() {
+    return `${API_BASE_URL}/sensors/rgb/image?t=${Date.now()}`;
+  }
 }
 
 // Export singleton instance

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.routers import scans, environmental, images, robot
+from app.routers import scans, environmental, images, robot, sensors
 
 # Create FastAPI app
 app = FastAPI(
@@ -26,6 +26,7 @@ app.include_router(scans.router, prefix="/api")
 app.include_router(environmental.router, prefix="/api")
 app.include_router(images.router, prefix="/api")
 app.include_router(robot.router, prefix="/api")
+app.include_router(sensors.router, prefix="/api")
 
 
 @app.get("/")
