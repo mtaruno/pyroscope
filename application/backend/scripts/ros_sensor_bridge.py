@@ -7,11 +7,11 @@ Saves latest sensor values to JSON file for API to read
 import rospy
 import json
 import os
-import cv2
-import numpy as np
+# import cv2
+# import numpy as np
 from std_msgs.msg import Float64
-from sensor_msgs.msg import Image
-from cv_bridge import CVBridge
+# from sensor_msgs.msg import Image
+# from cv_bridge import CVBridge
 import threading
 import time
 
@@ -19,7 +19,7 @@ class SensorBridge:
     def __init__(self):
         rospy.init_node('sensor_bridge', anonymous=True)
 
-        self.bridge = CVBridge()
+        # self.bridge = CVBridge()
 
         # Shared data file path (FastAPI will read this)
         self.data_dir = os.path.expanduser('~/Dev/pyroscope/application/backend/sensor_data')
@@ -27,8 +27,8 @@ class SensorBridge:
             os.makedirs(self.data_dir)
 
         self.data_file = os.path.join(self.data_dir, 'latest_sensors.json')
-        self.thermal_image_path = os.path.join(self.data_dir, 'thermal_latest.jpg')
-        self.rgb_image_path = os.path.join(self.data_dir, 'rgb_latest.jpg')
+        # self.thermal_image_path = os.path.join(self.data_dir, 'thermal_latest.jpg')
+        # self.rgb_image_path = os.path.join(self.data_dir, 'rgb_latest.jpg')
 
         # Latest sensor values
         self.sensor_data = {
