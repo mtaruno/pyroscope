@@ -58,7 +58,8 @@ class SensorBridge:
         rospy.loginfo("Sensor bridge started - listening to all topics")
 
         # Start background thread to periodically save data
-        self.save_thread = threading.Thread(target=self.save_loop, daemon=True)
+        self.save_thread = threading.Thread(target=self.save_loop)
+        self.save_thread.setDaemon(True)
         self.save_thread.start()
 
     def temperature_callback(self, msg):
@@ -99,9 +100,9 @@ class SensorBridge:
                 self.sensor_data['thermal_image_url'] = '/api/sensors/thermal/image'
                 self.sensor_data['timestamp'] = time.time()
 
-            rospy.loginfo_throttle(5, f"Thermal image saved: {cv_image.shape}")
+            rospy.loginfo_throttle(5, "Thermal image saved: %s" % str(cv_image.shape))
         except Exception as e:
-            rospy.logerr(f"Failed to process thermal image: {e}")
+            rospy.logerr("Failed to process thermal image: %s" % str(e))
 
     def rgb_image_callback(self, msg):
         try:
@@ -115,9 +116,9 @@ class SensorBridge:
                 self.sensor_data['rgb_image_url'] = '/api/sensors/rgb/image'
                 self.sensor_data['timestamp'] = time.time()
 
-            rospy.loginfo_throttle(5, f"RGB image saved: {cv_image.shape}")
+            rospy.loginfo_throttle(5, "RGB image saved: %s" % str(cv_image.shape))
         except Exception as e:
-            rospy.logerr(f"Failed to process RGB image: {e}")
+            rospy.logerr("Failed to process RGB image: %s" % str(e))
 
     def save_loop(self):
         """Periodically save sensor data to JSON file"""
@@ -132,7 +133,7 @@ class SensorBridge:
                     json.dump(data_copy, f, indent=2)
 
             except Exception as e:
-                rospy.logerr(f"Failed to save sensor data: {e}")
+                rospy.logerr("Failed to save sensor data: %s" % str(e))
 
             rate.sleep()
 
