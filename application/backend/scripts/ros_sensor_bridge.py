@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 from std_msgs.msg import Float64
 from sensor_msgs.msg import Image
-from cv_bridge import CVBridge
+# CVBridge not available - using manual conversion
 import threading
 import time
 
@@ -19,7 +19,7 @@ class SensorBridge:
     def __init__(self):
         rospy.init_node('sensor_bridge', anonymous=True)
 
-        self.bridge = CVBridge()
+        # CVBridge not needed - using manual image conversion
 
         # Shared data file path (FastAPI will read this)
         self.data_dir = os.path.expanduser('~/Dev/pyroscope/application/backend/sensor_data')
@@ -110,8 +110,19 @@ class SensorBridge:
 
     def rgb_image_callback(self, msg):
         try:
-            # Convert ROS Image to OpenCV format
-            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+            # Manual conversion without CVBridge
+            # Convert ROS Image message to numpy array
+            if msg.encoding == 'bgr8' or msg.encoding == 'rgb8':
+                # 8-bit color image
+                img_data = np.frombuffer(msg.data, dtype=np.uint8)
+                cv_image = img_data.reshape(msg.height, msg.width, 3)
+
+                # If RGB, convert to BGR for OpenCV
+                if msg.encoding == 'rgb8':
+                    cv_image = cv2.cvtColor(cv_image, cv2.COLOR_RGB2BGR)
+            else:
+                rospy.logwarn("Unsupported encoding: %s" % msg.encoding)
+                return
 
             # Save as JPEG
             cv2.imwrite(self.rgb_image_path, cv_image)
