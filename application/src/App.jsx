@@ -65,6 +65,13 @@ function App() {
   const [activeScanId, setActiveScanId] = useState(null)
   const [latestCapture, setLatestCapture] = useState(null)
   const latestCapturePollRef = useRef(null)
+  // Scan modal: live ROS snapshot every 5s, 20 times, then "Scan finish" and close
+  const [showScanModal, setShowScanModal] = useState(false)
+  const [scanModalSnapshot, setScanModalSnapshot] = useState(null)
+  const [scanModalTick, setScanModalTick] = useState(0)
+  const [scanModalFinished, setScanModalFinished] = useState(false)
+  const scanModalIntervalRef = useRef(null)
+  const scanModalCloseTimeoutRef = useRef(null)
 
   // Load scans from API on component mount
   useEffect(() => {
@@ -300,6 +307,64 @@ function App() {
     }
   }, [isScanning, isPaused, activeScanId])
 
+  // Scan modal: poll live snapshot every 5s, 20 times, then "Scan finish" and close after 2s
+  useEffect(() => {
+    if (!showScanModal || !isScanning) {
+      if (scanModalIntervalRef.current) {
+        clearInterval(scanModalIntervalRef.current)
+        scanModalIntervalRef.current = null
+      }
+      if (scanModalCloseTimeoutRef.current) {
+        clearTimeout(scanModalCloseTimeoutRef.current)
+        scanModalCloseTimeoutRef.current = null
+      }
+      return
+    }
+    if (scanModalFinished) {
+      scanModalCloseTimeoutRef.current = setTimeout(() => {
+        setShowScanModal(false)
+        setScanModalTick(0)
+        setScanModalFinished(false)
+        setScanModalSnapshot(null)
+        scanModalCloseTimeoutRef.current = null
+      }, 2000)
+      return () => {
+        if (scanModalCloseTimeoutRef.current) clearTimeout(scanModalCloseTimeoutRef.current)
+      }
+    }
+    const poll = async () => {
+      try {
+        const data = await apiClient.getLiveSnapshot()
+        setScanModalSnapshot(data)
+        setScanModalTick(prev => {
+          if (prev + 1 >= 20) {
+            if (scanModalIntervalRef.current) {
+              clearInterval(scanModalIntervalRef.current)
+              scanModalIntervalRef.current = null
+            }
+            setScanModalFinished(true)
+          }
+          return prev + 1
+        })
+      } catch (e) {
+        console.error('Live snapshot poll failed:', e)
+        setScanModalTick(prev => prev + 1)
+      }
+    }
+    poll()
+    scanModalIntervalRef.current = setInterval(poll, 5000)
+    return () => {
+      if (scanModalIntervalRef.current) {
+        clearInterval(scanModalIntervalRef.current)
+        scanModalIntervalRef.current = null
+      }
+      if (scanModalCloseTimeoutRef.current) {
+        clearTimeout(scanModalCloseTimeoutRef.current)
+        scanModalCloseTimeoutRef.current = null
+      }
+    }
+  }, [showScanModal, isScanning, scanModalFinished])
+
   // Poll latest waypoint capture while scanning
   useEffect(() => {
     if (!isScanning || !activeScanId) {
@@ -356,6 +421,10 @@ function App() {
     setIsPaused(false)
     setScanProgress(0)
     setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
+    setShowScanModal(true)
+    setScanModalTick(0)
+    setScanModalFinished(false)
+    setScanModalSnapshot(null)
   }
 
   const handlePauseScan = () => {
@@ -387,6 +456,7 @@ function App() {
     if (scanIntervalRef.current) {
       clearInterval(scanIntervalRef.current)
     }
+    setShowScanModal(false)
     setIsScanning(false)
     setIsPaused(false)
     setScanProgress(0)
@@ -584,6 +654,62 @@ function App() {
         )}
         <DataLog logs={scanLogs} />
       </main>
+      {showScanModal && (
+        <div className="scan-modal-overlay" role="dialog" aria-label="Live scan snapshot">
+          <div className="scan-modal-content">
+            <button
+              type="button"
+              className="scan-modal-close"
+              onClick={() => {
+                setShowScanModal(false)
+                setScanModalTick(0)
+                setScanModalFinished(false)
+                setScanModalSnapshot(null)
+              }}
+              aria-label="Close"
+            >
+              ×
+            </button>
+            {scanModalFinished ? (
+              <p className="scan-modal-finish">Scan finish</p>
+            ) : (
+              <>
+                <h3 className="latest-capture-title">Live ROS snapshot</h3>
+                <div className="latest-capture-content">
+                  {scanModalSnapshot?.rgb_image_url && (
+                    <div className="latest-capture-image-wrap">
+                      <p className="latest-capture-img-label">RGB (RealSense)</p>
+                      <img
+                        key={`rgb-${scanModalTick}`}
+                        src={`${apiClient.getBaseUrl()}${scanModalSnapshot.rgb_image_url}?t=${scanModalTick}`}
+                        alt="Live RGB"
+                        className="latest-capture-image"
+                      />
+                    </div>
+                  )}
+                  {scanModalSnapshot?.thermal_image_url && (
+                    <div className="latest-capture-image-wrap">
+                      <p className="latest-capture-img-label">Thermal</p>
+                      <img
+                        key={`thermal-${scanModalTick}`}
+                        src={`${apiClient.getBaseUrl()}${scanModalSnapshot.thermal_image_url}?t=${scanModalTick}`}
+                        alt="Live thermal"
+                        className="latest-capture-image"
+                      />
+                    </div>
+                  )}
+                  <div className="latest-capture-fields">
+                    <p>Temperature: <strong>{scanModalSnapshot?.temperature != null ? `${scanModalSnapshot.temperature} °C` : '---'}</strong></p>
+                    <p>Humidity: <strong>{scanModalSnapshot?.humidity != null ? `${scanModalSnapshot.humidity} %` : '---'}</strong></p>
+                    <p>Thermal mean: <strong>{scanModalSnapshot?.thermal_mean != null ? `${scanModalSnapshot.thermal_mean} °C` : '---'}</strong></p>
+                    <p className="scan-modal-tick">Snapshot {scanModalTick}/20</p>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

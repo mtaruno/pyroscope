@@ -140,6 +140,11 @@ class ApiClient {
     return this.request('/sensors/latest');
   }
 
+  /** Live ROS snapshot for scan modal (temperature, humidity, thermal_mean, image URLs). */
+  async getLiveSnapshot() {
+    return this.request('/sensors/live-snapshot');
+  }
+
   getThermalImageUrl() {
     return `${API_BASE_URL}/sensors/thermal/image?t=${Date.now()}`;
   }

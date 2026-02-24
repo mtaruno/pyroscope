@@ -72,6 +72,58 @@
   opacity: 0.8;
 }
 
+/* Scan modal: overlay + content (reuses .latest-capture-* for snapshot body) */
+.scan-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.scan-modal-content {
+  background: var(--bg-main, #1a1a1a);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 16px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  position: relative;
+}
+
+.scan-modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 4px;
+  opacity: 0.8;
+}
+
+.scan-modal-close:hover {
+  opacity: 1;
+}
+
+.scan-modal-finish {
+  margin: 24px 32px;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.scan-modal-tick {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
 @media (max-width: 1024px) {
   .dashboard {
     flex-direction: column;
