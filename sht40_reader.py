@@ -20,8 +20,8 @@ try:
 except ImportError:
     HAS_SERIAL = False
 
-# Default serial port: Arduino Nano on Linux usually appears as ttyACM0
-DEFAULT_PORT = "/dev/ttyACM0"
+# Default serial port: Arduino Nano (CH340) on Linux often appears as ttyUSB0
+DEFAULT_PORT = "/dev/ttyUSB0"
 DEFAULT_BAUD = 9600
 # Timeout for reading one line (seconds)
 READ_TIMEOUT = 2.0
@@ -35,7 +35,7 @@ class SHT40Sensor:
         Open serial connection to Arduino.
 
         Args:
-            port: Serial port (e.g. /dev/ttyACM0 on Linux, COM3 on Windows). Default /dev/ttyACM0.
+            port: Serial port (e.g. /dev/ttyUSB0 on Linux, COM3 on Windows). Default /dev/ttyUSB0.
             baud: Baud rate (default 9600). Must match Arduino Serial.begin().
         """
         if not HAS_SERIAL:

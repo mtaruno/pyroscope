@@ -39,7 +39,7 @@ except ImportError as e:
 
 def main():
     rate_hz = rospy.get_param("~rate", 1.0)
-    port = rospy.get_param("~port", "/dev/ttyACM0")
+    port = rospy.get_param("~port", "/dev/ttyUSB0")
     baud = int(rospy.get_param("~baud", 9600))
 
     pub_temp = rospy.Publisher("/sensors/sht40/temperature", Float64, queue_size=1)
