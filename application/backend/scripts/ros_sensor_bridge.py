@@ -23,10 +23,13 @@ class SensorBridge:
 
         # Shared data file path (FastAPI will read this)
         self.data_dir = os.path.expanduser('~/Dev/pyroscope/application/backend/sensor_data')
+        rospy.loginfo("Sensor data directory: %s" % self.data_dir)
         if not os.path.exists(self.data_dir):
+            rospy.loginfo("Creating directory: %s" % self.data_dir)
             os.makedirs(self.data_dir)
 
         self.data_file = os.path.join(self.data_dir, 'latest_sensors.json')
+        rospy.loginfo("Sensor data file: %s" % self.data_file)
         # self.thermal_image_path = os.path.join(self.data_dir, 'thermal_latest.jpg')
         # self.rgb_image_path = os.path.join(self.data_dir, 'rgb_latest.jpg')
 
@@ -80,45 +83,46 @@ class SensorBridge:
             self.sensor_data['timestamp'] = time.time()
             rospy.loginfo_throttle(5, "Thermal mean: %.2f C" % msg.data)
 
-    def thermal_image_callback(self, msg):
-        try:
-            # Convert ROS Image to OpenCV format
-            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-
-            # Normalize thermal image for display (assuming 16-bit or float)
-            if cv_image.dtype == np.uint16 or cv_image.dtype == np.float32:
-                # Normalize to 0-255
-                cv_image = cv2.normalize(cv_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
-
-            # Apply colormap for better visualization
-            thermal_colored = cv2.applyColorMap(cv_image, cv2.COLORMAP_JET)
-
-            # Save as JPEG
-            cv2.imwrite(self.thermal_image_path, thermal_colored)
-
-            with self.lock:
-                self.sensor_data['thermal_image_url'] = '/api/sensors/thermal/image'
-                self.sensor_data['timestamp'] = time.time()
-
-            rospy.loginfo_throttle(5, "Thermal image saved: %s" % str(cv_image.shape))
-        except Exception as e:
-            rospy.logerr("Failed to process thermal image: %s" % str(e))
-
-    def rgb_image_callback(self, msg):
-        try:
-            # Convert ROS Image to OpenCV format
-            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-
-            # Save as JPEG
-            cv2.imwrite(self.rgb_image_path, cv_image)
-
-            with self.lock:
-                self.sensor_data['rgb_image_url'] = '/api/sensors/rgb/image'
-                self.sensor_data['timestamp'] = time.time()
-
-            rospy.loginfo_throttle(5, "RGB image saved: %s" % str(cv_image.shape))
-        except Exception as e:
-            rospy.logerr("Failed to process RGB image: %s" % str(e))
+    # IMAGE SUPPORT TEMPORARILY DISABLED - uncomment when cv_bridge is available
+    # def thermal_image_callback(self, msg):
+    #     try:
+    #         # Convert ROS Image to OpenCV format
+    #         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
+    #
+    #         # Normalize thermal image for display (assuming 16-bit or float)
+    #         if cv_image.dtype == np.uint16 or cv_image.dtype == np.float32:
+    #             # Normalize to 0-255
+    #             cv_image = cv2.normalize(cv_image, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+    #
+    #         # Apply colormap for better visualization
+    #         thermal_colored = cv2.applyColorMap(cv_image, cv2.COLORMAP_JET)
+    #
+    #         # Save as JPEG
+    #         cv2.imwrite(self.thermal_image_path, thermal_colored)
+    #
+    #         with self.lock:
+    #             self.sensor_data['thermal_image_url'] = '/api/sensors/thermal/image'
+    #             self.sensor_data['timestamp'] = time.time()
+    #
+    #         rospy.loginfo_throttle(5, "Thermal image saved: %s" % str(cv_image.shape))
+    #     except Exception as e:
+    #         rospy.logerr("Failed to process thermal image: %s" % str(e))
+    #
+    # def rgb_image_callback(self, msg):
+    #     try:
+    #         # Convert ROS Image to OpenCV format
+    #         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+    #
+    #         # Save as JPEG
+    #         cv2.imwrite(self.rgb_image_path, cv_image)
+    #
+    #         with self.lock:
+    #             self.sensor_data['rgb_image_url'] = '/api/sensors/rgb/image'
+    #             self.sensor_data['timestamp'] = time.time()
+    #
+    #         rospy.loginfo_throttle(5, "RGB image saved: %s" % str(cv_image.shape))
+    #     except Exception as e:
+    #         rospy.logerr("Failed to process RGB image: %s" % str(e))
 
     def save_loop(self):
         """Periodically save sensor data to JSON file"""
