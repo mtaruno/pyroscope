@@ -2,7 +2,7 @@
   <!-- Pyroscope repo root (contains sht40_reader.py, thermal_capture.py). Default for Jetson: /home/pyroscope -->
   <arg name="pyroscope_root" default="/home/jetson/pyroscope"/>
   <arg name="sht40_rate" default="1.0"/>
-  <arg name="sht40_port" default="/dev/ttyUSB0"/>
+  <arg name="sht40_port" default="/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"/>
   <arg name="sht40_baud" default="9600"/>
   <arg name="thermal_rate" default="0.33"/>
   <arg name="thermal_publish_image" default="true"/>
