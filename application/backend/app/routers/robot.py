@@ -100,7 +100,7 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
         ros_cmd = (
             f'source /opt/ros/melodic/setup.bash && '
             f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
-            f'/opt/ros/melodic/bin/roslaunch pyroscope_navigation coverage_mission.launch '
+            f'/opt/ros/melodic/bin/roslaunch pyroscope_navigation coverage_mission_nav.launch '
             f'area_width:={config.area_width if config else 5.0} '
             f'area_height:={config.area_height if config else 5.0} '
             f'row_spacing:={config.row_spacing if config else 0.8} '

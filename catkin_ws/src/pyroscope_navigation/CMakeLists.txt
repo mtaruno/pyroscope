@@ -7,12 +7,19 @@ find_package(catkin REQUIRED COMPONENTS
   geometry_msgs
   nav_msgs
   tf
+  actionlib
+  move_base_msgs
 )
 
 catkin_package()
 
 catkin_install_python(PROGRAMS
   scripts/waypoint_controller.py
+  scripts/coverage_planner.py
+  scripts/lidar_obstacle_detector.py
+  scripts/safety_stop.py
+  scripts/random_explorer.py
+  scripts/fake_odom.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

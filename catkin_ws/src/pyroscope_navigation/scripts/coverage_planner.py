@@ -3,13 +3,14 @@
 """
 Coverage Path Planner for Pyroscope
 Generates a boustrophedon (lawnmower) pattern over a rectangular area
-and sends waypoints sequentially to the waypoint controller.
+and sends waypoints to move_base for execution with obstacle avoidance.
 Pauses at each waypoint for thermal camera capture.
 """
 
 import rospy
 import math
-from geometry_msgs.msg import PoseStamped
+import actionlib
+from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import Bool, String
 
 
@@ -27,26 +28,30 @@ class CoveragePlanner:
 
         # Timing parameters
         self.dwell_time = rospy.get_param('~dwell_time', 3.0)
-        self.waypoint_timeout = rospy.get_param('~waypoint_timeout', 30.0)
+        self.waypoint_timeout = rospy.get_param('~waypoint_timeout', 60.0)
 
         # State
-        self.goal_reached = False
-        self.obstacle_detected = False
         self.waypoints = []
         self.current_index = 0
 
         # Publishers
-        self.waypoint_pub = rospy.Publisher('/nav/target_waypoint', PoseStamped, queue_size=1)
         self.capture_ready_pub = rospy.Publisher('/coverage/capture_ready', Bool, queue_size=1)
         self.progress_pub = rospy.Publisher('/coverage/progress', String, queue_size=1)
         self.complete_pub = rospy.Publisher('/coverage/complete', Bool, queue_size=1)
 
-        # Subscribers
-        rospy.Subscriber('/nav/goal_reached', Bool, self.goal_reached_callback)
-        rospy.Subscriber('/obstacle_detected', Bool, self.obstacle_callback)
+        # move_base action client
+        self.move_base_client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
+        rospy.loginfo("Waiting for move_base action server...")
+        if not self.move_base_client.wait_for_server(rospy.Duration(30.0)):
+            rospy.logfatal("move_base action server not available — aborting")
+            rospy.signal_shutdown("move_base unavailable")
+            return
+
+        rospy.loginfo("Connected to move_base action server")
 
         # Generate waypoints
         self.generate_waypoints()
+        self.validate_waypoint_distances()
 
         rospy.loginfo("Coverage Planner initialized")
         rospy.loginfo("  Area: %.1f x %.1f m", self.area_width, self.area_height)
@@ -54,13 +59,6 @@ class CoveragePlanner:
         rospy.loginfo("  Origin: (%.1f, %.1f)", self.origin_x, self.origin_y)
         rospy.loginfo("  Total waypoints: %d", len(self.waypoints))
         rospy.loginfo("  Dwell time: %.1f s", self.dwell_time)
-
-    def goal_reached_callback(self, msg):
-        if msg.data:
-            self.goal_reached = True
-
-    def obstacle_callback(self, msg):
-        self.obstacle_detected = msg.data
 
     def generate_waypoints(self):
         """Generate boustrophedon (lawnmower) waypoints"""
@@ -93,16 +91,44 @@ class CoveragePlanner:
 
         rospy.loginfo("Generated %d waypoints in %d rows", len(self.waypoints), num_rows)
 
-    def send_waypoint(self, x, y):
-        """Publish a waypoint to the waypoint controller"""
-        msg = PoseStamped()
-        msg.header.stamp = rospy.Time.now()
-        msg.header.frame_id = "odom"
-        msg.pose.position.x = x
-        msg.pose.position.y = y
-        msg.pose.position.z = 0.0
-        msg.pose.orientation.w = 1.0
-        self.waypoint_pub.publish(msg)
+    def validate_waypoint_distances(self):
+        """Warn if consecutive waypoints exceed global costmap range"""
+        costmap_half = 7.5  # half of 15m rolling window
+        for i in range(1, len(self.waypoints)):
+            x0, y0 = self.waypoints[i - 1]
+            x1, y1 = self.waypoints[i]
+            dist = math.sqrt((x1 - x0) ** 2 + (y1 - y0) ** 2)
+            if dist > costmap_half:
+                rospy.logwarn(
+                    "Waypoints %d->%d are %.1fm apart (exceeds %.1fm costmap radius) "
+                    "— move_base may fail to plan",
+                    i, i + 1, dist, costmap_half
+                )
+
+    def send_move_base_goal(self, x, y):
+        """Send a goal to move_base and wait for result. Returns True on success."""
+        goal = MoveBaseGoal()
+        goal.target_pose.header.frame_id = "odom"
+        goal.target_pose.header.stamp = rospy.Time.now()
+        goal.target_pose.pose.position.x = x
+        goal.target_pose.pose.position.y = y
+        goal.target_pose.pose.position.z = 0.0
+        goal.target_pose.pose.orientation.w = 1.0
+
+        self.move_base_client.send_goal(goal)
+        finished = self.move_base_client.wait_for_result(rospy.Duration(self.waypoint_timeout))
+
+        if not finished:
+            self.move_base_client.cancel_goal()
+            rospy.logwarn("move_base timed out reaching (%.2f, %.2f)", x, y)
+            return False
+
+        state = self.move_base_client.get_state()
+        if state == actionlib.GoalStatus.SUCCEEDED:
+            return True
+        else:
+            rospy.logwarn("move_base failed for (%.2f, %.2f) — state %d", x, y, state)
+            return False
 
     def publish_progress(self):
         """Publish current progress"""
@@ -114,8 +140,6 @@ class CoveragePlanner:
         self.progress_pub.publish(String(data=msg))
 
     def run(self):
-        rate = rospy.Rate(10)
-
         # Wait for subscribers to connect
         rospy.sleep(2.0)
 
@@ -124,42 +148,15 @@ class CoveragePlanner:
         while self.current_index < len(self.waypoints) and not rospy.is_shutdown():
             x, y = self.waypoints[self.current_index]
 
-            # Send waypoint
-            self.goal_reached = False
-            self.send_waypoint(x, y)
             rospy.loginfo("Waypoint %d/%d: (%.2f, %.2f)",
                           self.current_index + 1, len(self.waypoints), x, y)
             self.publish_progress()
 
-            # Wait for goal reached or timeout
-            start_time = rospy.Time.now()
-            obstacle_start = None
-
-            while not rospy.is_shutdown():
-                elapsed = (rospy.Time.now() - start_time).to_sec()
-
-                # Goal reached
-                if self.goal_reached:
-                    rospy.loginfo("Reached waypoint %d/%d", self.current_index + 1, len(self.waypoints))
-                    break
-
-                # Timeout
-                if elapsed > self.waypoint_timeout:
-                    rospy.logwarn("Timeout reaching waypoint %d, skipping", self.current_index + 1)
-                    break
-
-                # Obstacle detected - wait 5s then skip
-                if self.obstacle_detected:
-                    if obstacle_start is None:
-                        obstacle_start = rospy.Time.now()
-                        rospy.logwarn("Obstacle detected while heading to waypoint %d", self.current_index + 1)
-                    elif (rospy.Time.now() - obstacle_start).to_sec() > 5.0:
-                        rospy.logwarn("Obstacle persists, skipping waypoint %d", self.current_index + 1)
-                        break
-                else:
-                    obstacle_start = None
-
-                rate.sleep()
+            success = self.send_move_base_goal(x, y)
+            if success:
+                rospy.loginfo("Reached waypoint %d/%d", self.current_index + 1, len(self.waypoints))
+            else:
+                rospy.logwarn("Skipping waypoint %d/%d", self.current_index + 1, len(self.waypoints))
 
             # Dwell at waypoint for thermal capture
             rospy.loginfo("Dwelling for %.1f s (thermal capture)", self.dwell_time)
