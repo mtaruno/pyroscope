@@ -7,11 +7,11 @@ Saves latest sensor values to JSON file for API to read
 import rospy
 import json
 import os
-# import cv2
-# import numpy as np
+import cv2
+import numpy as np
 from std_msgs.msg import Float64
-# from sensor_msgs.msg import Image
-# from cv_bridge import CVBridge
+from sensor_msgs.msg import Image
+from cv_bridge import CVBridge
 import threading
 import time
 
@@ -19,7 +19,7 @@ class SensorBridge:
     def __init__(self):
         rospy.init_node('sensor_bridge', anonymous=True)
 
-        # self.bridge = CVBridge()
+        self.bridge = CVBridge()
 
         # Shared data file path (FastAPI will read this)
         self.data_dir = os.path.expanduser('~/Dev/pyroscope/application/backend/sensor_data')
@@ -30,8 +30,8 @@ class SensorBridge:
 
         self.data_file = os.path.join(self.data_dir, 'latest_sensors.json')
         rospy.loginfo("Sensor data file: %s" % self.data_file)
-        # self.thermal_image_path = os.path.join(self.data_dir, 'thermal_latest.jpg')
-        # self.rgb_image_path = os.path.join(self.data_dir, 'rgb_latest.jpg')
+        self.thermal_image_path = os.path.join(self.data_dir, 'thermal_latest.jpg')
+        self.rgb_image_path = os.path.join(self.data_dir, 'rgb_latest.jpg')
 
         # Latest sensor values
         self.sensor_data = {
@@ -55,10 +55,10 @@ class SensorBridge:
         rospy.loginfo("  [OK] /sensors/thermal/mean")
         # rospy.Subscriber('/sensors/thermal/image', Image, self.thermal_image_callback)
         # rospy.loginfo("  [OK] /sensors/thermal/image")
-        # rospy.Subscriber('/camera/color/image_raw', Image, self.rgb_image_callback)
-        # rospy.loginfo("  [OK] /camera/color/image_raw")
+        rospy.Subscriber('/camera/color/image_raw', Image, self.rgb_image_callback)
+        rospy.loginfo("  [OK] /camera/color/image_raw")
 
-        rospy.loginfo("Sensor bridge started - listening to sensor value topics (images disabled)")
+        rospy.loginfo("Sensor bridge started - listening to sensor topics (RGB camera enabled)")
 
         # Start background thread to periodically save data
         self.save_thread = threading.Thread(target=self.save_loop)
@@ -107,22 +107,22 @@ class SensorBridge:
     #         rospy.loginfo_throttle(5, "Thermal image saved: %s" % str(cv_image.shape))
     #     except Exception as e:
     #         rospy.logerr("Failed to process thermal image: %s" % str(e))
-    #
-    # def rgb_image_callback(self, msg):
-    #     try:
-    #         # Convert ROS Image to OpenCV format
-    #         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-    #
-    #         # Save as JPEG
-    #         cv2.imwrite(self.rgb_image_path, cv_image)
-    #
-    #         with self.lock:
-    #             self.sensor_data['rgb_image_url'] = '/api/sensors/rgb/image'
-    #             self.sensor_data['timestamp'] = time.time()
-    #
-    #         rospy.loginfo_throttle(5, "RGB image saved: %s" % str(cv_image.shape))
-    #     except Exception as e:
-    #         rospy.logerr("Failed to process RGB image: %s" % str(e))
+
+    def rgb_image_callback(self, msg):
+        try:
+            # Convert ROS Image to OpenCV format
+            cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
+
+            # Save as JPEG
+            cv2.imwrite(self.rgb_image_path, cv_image)
+
+            with self.lock:
+                self.sensor_data['rgb_image_url'] = '/api/sensors/rgb/image'
+                self.sensor_data['timestamp'] = time.time()
+
+            rospy.loginfo_throttle(5, "RGB image saved: %s" % str(cv_image.shape))
+        except Exception as e:
+            rospy.logerr("Failed to process RGB image: %s" % str(e))
 
     def save_loop(self):
         """Periodically save sensor data to JSON file"""
