@@ -15,6 +15,17 @@ from sensor_msgs.msg import Image
 import threading
 import time
 
+try:
+    import serial
+    HAS_SERIAL = True
+except ImportError:
+    HAS_SERIAL = False
+
+# Arduino serial port for SHT40 sensor (same as sht40_reader.py)
+SHT40_PORT = "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0"
+SHT40_BAUD = 9600
+
+
 class SensorBridge:
     def __init__(self):
         rospy.init_node('sensor_bridge', anonymous=True)

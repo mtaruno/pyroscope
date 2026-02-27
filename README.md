@@ -26,6 +26,11 @@ The navigation system is built on ROS Melodic and runs across two machines: the 
 
 Here's the simplest operation, teleooperating the robot: roslaunch transbot_ctrl transbot_keyboard.launch
 
+Known environment issues:
+- If there is no rospkg, do pip3 install rospkg
+- 
+
+
 #### SLAM & Mapping
 - GMapping builds a 2D occupancy grid map using the RPLidar and wheel odometry
 - Drive the robot manually with keyboard teleop to map the environment

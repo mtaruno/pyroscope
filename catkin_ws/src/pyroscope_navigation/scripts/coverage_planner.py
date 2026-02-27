@@ -43,7 +43,7 @@ class CoveragePlanner:
         self.move_base_client = actionlib.SimpleActionClient('move_base', MoveBaseAction)
         rospy.loginfo("Waiting for move_base action server...")
         if not self.move_base_client.wait_for_server(rospy.Duration(30.0)):
-            rospy.logfatal("move_base action server not available — aborting")
+            rospy.logfatal("move_base action server not available -- aborting")
             rospy.signal_shutdown("move_base unavailable")
             return
 
@@ -101,7 +101,7 @@ class CoveragePlanner:
             if dist > costmap_half:
                 rospy.logwarn(
                     "Waypoints %d->%d are %.1fm apart (exceeds %.1fm costmap radius) "
-                    "— move_base may fail to plan",
+                    "-- move_base may fail to plan",
                     i, i + 1, dist, costmap_half
                 )
 
@@ -127,7 +127,7 @@ class CoveragePlanner:
         if state == actionlib.GoalStatus.SUCCEEDED:
             return True
         else:
-            rospy.logwarn("move_base failed for (%.2f, %.2f) — state %d", x, y, state)
+            rospy.logwarn("move_base failed for (%.2f, %.2f) -- state %d", x, y, state)
             return False
 
     def publish_progress(self):

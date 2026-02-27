@@ -89,14 +89,33 @@ async def get_rgb_image():
 async def get_live_snapshot():
     """Live ROS topic snapshot: temperature, humidity, thermal_mean + image URLs."""
     data = get_latest_from_ros()
-    thermal_path = _live_thermal_path()
-    rgb_path = _live_rgb_path()
+
+    # Fall back to JSON file written by standalone scripts/ros_sensor_bridge.py
+    # when the in-process ROS bridge cache is empty.
+    has_sensor_data = any(data.get(k) is not None for k in ("temperature", "humidity", "thermal_mean"))
+    if not has_sensor_data and SENSOR_DATA_FILE.exists():
+        try:
+            with open(SENSOR_DATA_FILE, 'r') as f:
+                data = json.load(f)
+        except Exception:
+            pass
+
+    # Prefer in-process bridge image paths; fall back to standalone script paths.
+    thermal_image_url = (
+        "/api/sensors/live/thermal" if _live_thermal_path().exists()
+        else ("/api/sensors/thermal/image" if THERMAL_IMAGE_PATH.exists() else None)
+    )
+    rgb_image_url = (
+        "/api/sensors/live/rgb" if _live_rgb_path().exists()
+        else ("/api/sensors/rgb/image" if RGB_IMAGE_PATH.exists() else None)
+    )
+
     return SensorData(
         temperature=data.get("temperature"),
         humidity=data.get("humidity"),
         thermal_mean=data.get("thermal_mean"),
-        thermal_image_url="/api/sensors/live/thermal" if thermal_path.exists() else None,
-        rgb_image_url="/api/sensors/live/rgb" if rgb_path.exists() else None,
+        thermal_image_url=thermal_image_url,
+        rgb_image_url=rgb_image_url,
     )
 
 
