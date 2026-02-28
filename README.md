@@ -23,22 +23,35 @@ Here is the architecture of Pyroscope:
 
 The navigation system is built on ROS Melodic and runs across two machines: the Transbot (Jetson) handles hardware drivers and sensors, while a remote Ubuntu 18.04 PC runs navigation modules such as obstacle detection and high-level path planning.
 
+
+
 Here's the simplest operation, teleooperating the robot: roslaunch transbot_ctrl transbot_keyboard.launch
 
 Known environment issues:
 - If there is no rospkg, do pip3 install rospkg
 
-#### SLAM & Mapping
-- GMapping builds a 2D occupancy grid map using the RPLidar and wheel odometry
-- Drive the robot manually with keyboard teleop to map the environment
-- Save the map for later use with `map_saver`
 
-`rosrun map_server map_saver -f ~/maps.hector_map`
+#### Demo
 
+1. Place it in the dead center of the 3x3m square, facing along the longest open line (away from the obstacles). That gives it ~1.5m clearance to every wall, so:
+  - The costmap initializes with free space all around
+  - The first waypoint plan has room to route
+  - If recovery triggers (rotate in place), it won't sweep into a wall
 
-#### Autonomous Navigation
-- AMCL localizes the robot against a saved map
-- `move_base` with DWA local planner handles point-to-point navigation and path planning
+Also, set the origin so waypoints start from the center rather than from a corner near a wall:
+roslaunch pyroscope_navigation coverage_mission_nav.launch \
+    area_width:=2 area_height:=2 \
+    origin_x:=-1.0 origin_y:=-1.0
+
+This centers the 2x2m coverage grid around the robot's starting position (0,0 in odom frame) instead of starting from corner (0,0) and going to (2,2) -- which would put
+  half the waypoints near the far walls.
+
+For the getting-stuck-on-walls problem, the robot should recover on its own now with the reduced inflation. But if it does get stuck again, you can cancel the current goal without killing everything:
+
+rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID '{}'
+
+This tells move_base to stop pursuing the current waypoint. The coverage planner will then time out and move to the next one -- no need to physically touch the robot.
+
 
 #### Coverage Path Planning
 - Boustrophedon (lawnmower) pattern covers a configurable rectangular area (default 10m x 10m, 1m spacing)
@@ -65,7 +78,6 @@ To launch this coverage mission:
 
 Testing the odometry:
 timeout 3 rostopic pub /cmd_vel geometry_msgs/Twist '{linear: {x: 0.3}}'
-
 
 If you want to publish zero velocity in attempt to stop the robot:
 `rostopic pub -1 /cmd_vel geometry_msgs/Twist '{linear: {x: 0, y: 0, z: 0}, angular: {x: 0, y: 0, z: 0}}`

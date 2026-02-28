@@ -1,6 +1,6 @@
 """
-简单的服务器启动脚本（避免Windows权限问题）
-直接运行: python run.py
+Simple server startup script.
+Run: python run.py
 """
 import uvicorn
 
