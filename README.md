@@ -10,7 +10,6 @@ Now here's what we made to combat this problem:
 
 ![Rover on Shrubs](ba5ac9779fb52d08976bb2c3c9e5a83b.jpg)
 
-
 Pyroscope is a rover equipped with a depth camera, GPS, and thermal camera. It is designed to automate plot scale surface-fuel sampling for prescribed fire and AI fuel mapping. 
 
 Pyroscope is small, lightweight, and maneuverable. This is in contrast to typical rovers that roam around the forest that are often larger and crush vegetation as it moves. 
@@ -28,8 +27,6 @@ Here's the simplest operation, teleooperating the robot: roslaunch transbot_ctrl
 
 Known environment issues:
 - If there is no rospkg, do pip3 install rospkg
-- 
-
 
 #### SLAM & Mapping
 - GMapping builds a 2D occupancy grid map using the RPLidar and wheel odometry
@@ -106,7 +103,77 @@ The coverage mission uses ROS `move_base` with DWA local planning and rolling-wi
 - **Local costmap** -- 4x4m rolling window. DWA local planner samples velocity trajectories and picks the best one that avoids obstacles.
 - **Inflation layer** -- expands detected obstacles by 0.25m so the robot keeps a safe buffer.
 
-When an obstacle appears in the lidar scan, the costmap marks it, DWA steers around it, and NavfnROS replans the global path if needed. If the robot still can't reach a waypoint within the timeout, it skips and moves on.
+#### How the planner works step by step
+
+The full planning pipeline runs continuously while the robot drives to each waypoint:
+
+```
+ /scan (lidar)
+    |
+    v
+ +---------------------+
+ | Costmap Obstacle     |  Marks cells as LETHAL (254) where lidar hits
+ | Layer                |  Clears cells along raytrace (no obstacle there)
+ +---------------------+
+    |
+    v
+ +---------------------+
+ | Costmap Inflation    |  Expands every lethal cell outward by 0.25m
+ | Layer                |  Gradient: lethal (254) -> 0 over the radius
+ +---------------------+  Robot footprint fits? Safe. Overlaps inflation? Penalized.
+    |
+    v
+ +--+------------------+     +---------------------+
+ | Global Costmap      |     | Local Costmap       |
+ | (15m x 15m)         |     | (4m x 4m)           |
+ | Rolling window      |     | Rolling window      |
+ | Updates at 2 Hz     |     | Updates at 5 Hz     |
+ +---------------------+     +---------------------+
+    |                              |
+    v                              v
+ +---------------------+     +---------------------+
+ | NavfnROS            |     | DWA Local Planner   |
+ | (Global Planner)    |     |                     |
+ | Dijkstra on the     |     | 1. Sample velocities|
+ | global costmap grid |     |    (vx, vtheta)     |
+ | Plans full path     |     | 2. Simulate 2.0s    |
+ | from robot to goal  |     |    forward          |
+ | Replans at 1 Hz     |     | 3. Score each:      |
+ +---------------------+     |    - path follow: 20|
+    |                         |    - goal progress:32|
+    | global path             |    - obstacle dist:  |
+    v                         |      0.05           |
+ +---------------------+     | 4. Pick best        |
+ | DWA follows the     |<----+    collision-free    |
+ | global path but     |     |    trajectory       |
+ | adapts locally      |     | 5. Publish /cmd_vel |
+ +---------------------+     |    at 5 Hz          |
+                              +---------------------+
+```
+
+**Costmap cell values:**
+- 254 = lethal (obstacle detected here, do not enter)
+- 253 = inscribed (robot center here = collision)
+- 1-252 = inflation gradient (higher = closer to obstacle = more costly)
+- 0 = free space
+
+**Example: robot approaches a wall at waypoint (2, 0)**
+1. Lidar sees wall at 1.5m ahead
+2. Obstacle layer marks those cells as 254 in both costmaps
+3. Inflation layer expands the wall by 0.25m with a cost gradient
+4. NavfnROS runs Dijkstra -- the cheapest global path now curves around the wall
+5. DWA samples 12 forward speeds x 20 rotation speeds = 240 candidate trajectories
+6. Trajectories that pass through inflated cells get penalized by `occdist_scale`
+7. Trajectories that collide with lethal cells are rejected entirely
+8. The winning trajectory curves the robot away from the wall toward the goal
+9. If no collision-free trajectory exists, move_base triggers recovery (rotate in place to clear costmap, then retry)
+10. If recovery fails, move_base aborts and coverage_planner skips to the next waypoint
+
+**Why the robot should never hit a wall:**
+- The inflation radius (0.25m) is larger than the robot's half-width (0.125m)
+- DWA will not select any trajectory that enters the inscribed radius
+- Even if the global path passes near a wall, DWA locally avoids it
+- The costmap updates at 5 Hz from live lidar, so new obstacles are seen within 200ms
 
 **Prerequisites (install once on the remote PC):**
 
