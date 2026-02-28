@@ -62,6 +62,11 @@
   margin: 4px 0;
 }
 
+.scan-config-note {
+  opacity: 0.75;
+  font-size: 0.8rem;
+}
+
 .scan-config-actions {
   display: flex;
   justify-content: flex-end;

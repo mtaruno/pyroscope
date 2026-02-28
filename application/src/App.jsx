@@ -16,12 +16,6 @@ function App() {
     gpsAccuracy: 2.3
   })
 
-  const [scanConfig, setScanConfig] = useState({
-    scanArea: '50 m × 50 m',
-    boundaryArea: '200 m × 200 m',
-    estimatedDuration: '~ 15 min'
-  })
-
   // Scan target position (where the robot will scan, can be dragged within boundary)
   const [scanTarget, setScanTarget] = useState({
     lat: 34.2257,
@@ -314,13 +308,6 @@ function App() {
       setScanProgress(response?.progress_percent || 0)
       setScanPhase('Waiting for /coverage/capture_ready = true ...')
       setShowFuelUploadPrompt(false)
-      const plannedPoints = response?.total_points || configuredTotal || 0
-      const estimatedMinutes = Math.max(1, Math.round((plannedPoints * 2) / 60))
-      setScanConfig({
-        scanArea: `${areaSize} m × ${areaSize} m`,
-        boundaryArea: `${areaSize} m × ${areaSize} m`,
-        estimatedDuration: `~ ${estimatedMinutes} min`
-      })
       setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
     } catch (error) {
       console.error('Failed to start coverage mission:', error)
@@ -459,7 +446,6 @@ function App() {
       <Sidebar
         locationData={locationData}
         setLocationData={setLocationData}
-        scanConfig={scanConfig}
         scanTarget={scanTarget}
         robotStatus={robotStatus}
         environmentalData={environmentalData}

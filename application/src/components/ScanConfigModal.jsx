@@ -3,10 +3,21 @@ import './ScanConfigModal.css'
 
 const AREA_OPTIONS = [3, 25, 50]
 const PRECISION_OPTIONS = [1, 5]
+const SCAN_SECONDS_PER_POINT = 5
+const FUEL_ESTIMATE_SECONDS_PER_POINT = 60
 
 function calcTotalPoints(areaSize, precision) {
   const pointsPerSide = Math.round(areaSize / precision) + 1
   return pointsPerSide * pointsPerSide
+}
+
+function formatDuration(totalSeconds) {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  if (hours > 0) return `${hours}h ${minutes}m`
+  if (minutes > 0) return `${minutes}m ${seconds}s`
+  return `${seconds}s`
 }
 
 function ScanConfigModal({ open, onCancel, onConfirm }) {
@@ -17,6 +28,8 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
     () => calcTotalPoints(areaSize, precision),
     [areaSize, precision]
   )
+  const scanEstimateSeconds = totalPoints * SCAN_SECONDS_PER_POINT
+  const fullEstimateSeconds = scanEstimateSeconds + (totalPoints * FUEL_ESTIMATE_SECONDS_PER_POINT)
 
   if (!open) return null
 
@@ -60,6 +73,8 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
         <div className="scan-config-summary">
           <p>Points per side: <strong>{Math.round(areaSize / precision) + 1}</strong></p>
           <p>Total points: <strong>{totalPoints}</strong></p>
+          <p>Estimated scan time: <strong>{formatDuration(scanEstimateSeconds)}</strong> <span className="scan-config-note">(~5s per point)</span></p>
+          <p>Estimated full result time: <strong>{formatDuration(fullEstimateSeconds)}</strong> <span className="scan-config-note">(includes fuel API, ~1m per point)</span></p>
         </div>
 
         <div className="scan-config-actions">

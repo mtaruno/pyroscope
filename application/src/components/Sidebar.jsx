@@ -1,11 +1,10 @@
 import { useState } from 'react'
-import { Edit2, MapPin, Settings, Activity, Thermometer, History, Target, Pause, Play, Square, RefreshCw } from 'lucide-react'
+import { Edit2, MapPin, Activity, Thermometer, History, Target, Pause, Play, Square, RefreshCw } from 'lucide-react'
 import './Sidebar.css'
 
 function Sidebar({
   locationData,
   setLocationData,
-  scanConfig,
   scanTarget,
   robotStatus,
   environmentalData,
@@ -214,28 +213,6 @@ function Sidebar({
               {scanProgress >= 100 ? 'New Scan' : 'Start Scan'}
             </button>
           )}
-        </div>
-      </section>
-
-      {/* Scan Configuration */}
-      <section className="sidebar-section">
-        <h3 className="section-title">
-          <Settings size={16} />
-          Scan Configuration
-        </h3>
-        <div className="info-card">
-          <div className="info-row">
-            <span className="info-label">Scan Area:</span>
-            <span className="info-value">{scanConfig.scanArea}</span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">Boundary Area:</span>
-            <span className="info-value">{scanConfig.boundaryArea}</span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">Estimated Duration:</span>
-            <span className="info-value">{scanConfig.estimatedDuration}</span>
-          </div>
         </div>
       </section>
 
