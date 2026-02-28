@@ -1,6 +1,7 @@
 .sidebar {
   width: 320px;
   min-width: 320px;
+  height: 100vh;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border-light);
   padding: 20px;

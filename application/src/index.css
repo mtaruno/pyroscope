@@ -52,6 +52,13 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html,
+body,
+#root {
+  height: 100vh;
+  overflow: hidden;
+}
+
 #root {
   min-height: 100vh;
 }
