@@ -699,9 +699,9 @@ function App() {
                     </div>
                   )}
                   <div className="latest-capture-fields">
-                    <p>Temperature: <strong>{scanModalSnapshot?.temperature != null ? `${scanModalSnapshot.temperature} °C` : '---'}</strong></p>
-                    <p>Humidity: <strong>{scanModalSnapshot?.humidity != null ? `${scanModalSnapshot.humidity} %` : '---'}</strong></p>
-                    <p>Thermal mean: <strong>{scanModalSnapshot?.thermal_mean != null ? `${scanModalSnapshot.thermal_mean} °C` : '---'}</strong></p>
+                    <p>Temperature: <strong>{(latestCapture?.air_temperature ?? scanModalSnapshot?.temperature) != null ? `${latestCapture?.air_temperature ?? scanModalSnapshot?.temperature} °C` : '---'}</strong></p>
+                    <p>Humidity: <strong>{(latestCapture?.air_humidity ?? scanModalSnapshot?.humidity) != null ? `${latestCapture?.air_humidity ?? scanModalSnapshot?.humidity} %` : '---'}</strong></p>
+                    <p>Thermal mean: <strong>{(latestCapture?.thermal_mean ?? scanModalSnapshot?.thermal_mean) != null ? `${latestCapture?.thermal_mean ?? scanModalSnapshot?.thermal_mean} °C` : '---'}</strong></p>
                     <p className="scan-modal-tick">Snapshot {scanModalTick}/20</p>
                   </div>
                 </div>
