@@ -30,12 +30,6 @@ function App() {
     operatingState: 'Idle'
   })
 
-  const [environmentalData, setEnvironmentalData] = useState({
-    airTemperature: null,
-    airHumidity: null,
-    windSpeed: null
-  })
-
   const [scanHistory, setScanHistory] = useState([
     { id: 1, zone: 'Area A-01', date: '2026.02.01', riskLevel: 'high' },
     { id: 2, zone: 'Area B-03', date: '2026.01.28', riskLevel: 'low' }
@@ -149,7 +143,7 @@ function App() {
       try {
         const status = await apiClient.getRobotStatus('ROBOT-001')
         setRobotStatus({
-          battery: status.battery_level || 100,
+          battery: status.battery_level ?? 100,
           storageUsed: status.storage_used || 0,
           storageTotal: status.storage_total || 8,
           signalStrength: status.signal_strength || 'Good',
@@ -448,7 +442,6 @@ function App() {
         setLocationData={setLocationData}
         scanTarget={scanTarget}
         robotStatus={robotStatus}
-        environmentalData={environmentalData}
         scanHistory={scanHistory}
         isScanning={isScanning}
         isPaused={isPaused}

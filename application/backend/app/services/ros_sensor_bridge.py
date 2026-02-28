@@ -27,6 +27,8 @@ _ros_cache: Dict[str, Any] = {
     "thermal_mean": None,
     "thermal_image_path": None,
     "rgb_image_path": None,
+    "voltage": None,
+    "battery_percent": None,
     "capture_ready_queue": [],
     "lock": threading.Lock(),
     "capture_ready_condition": threading.Condition(),
@@ -35,11 +37,20 @@ _ros_thread: Optional[threading.Thread] = None
 _ros_stop = threading.Event()
 
 
+def voltage_to_percent(voltage: float) -> int:
+    """3S LiPo mapping: 9.6V -> 0%, 12.6V -> 100% (clamped)."""
+    try:
+        percent = ((float(voltage) - 9.6) / (12.6 - 9.6)) * 100.0
+    except Exception:
+        return 0
+    return max(0, min(100, int(round(percent))))
+
+
 def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str):
     """Run rospy node and subscribe to sensor topics; update _ros_cache."""
     try:
         import rospy
-        from std_msgs.msg import Float64, Bool
+        from std_msgs.msg import Float64, Float32, Bool
         from sensor_msgs.msg import Image
     except ImportError as e:
         import logging
@@ -51,6 +62,10 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         bridge = CvBridge()
     except ImportError:
         bridge = None
+    try:
+        from transbot_msgs.msg import Battery as TransbotBattery
+    except ImportError:
+        TransbotBattery = None
 
     def cb_temp(msg):
         with _ros_cache["lock"]:
@@ -102,11 +117,45 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
             _ros_cache["capture_ready_queue"].append(True)
             _ros_cache["capture_ready_condition"].notify_all()
 
+    def _set_voltage(voltage_value):
+        with _ros_cache["lock"]:
+            _ros_cache["voltage"] = voltage_value
+            _ros_cache["battery_percent"] = voltage_to_percent(voltage_value)
+
+    def cb_voltage_float(msg):
+        try:
+            _set_voltage(float(msg.data))
+        except Exception:
+            pass
+
+    def cb_voltage_battery(msg):
+        try:
+            value = getattr(msg, "Voltage", None)
+            if value is None:
+                value = getattr(msg, "voltage", None)
+            if value is None:
+                return
+            _set_voltage(float(value))
+        except Exception:
+            pass
+
     rospy.init_node("waypoint_capture_bridge", anonymous=True, disable_signals=True)
     rospy.Subscriber("/sensors/sht40/temperature", Float64, cb_temp, queue_size=1)
     rospy.Subscriber("/sensors/sht40/humidity", Float64, cb_hum, queue_size=1)
     rospy.Subscriber("/sensors/thermal/mean", Float64, cb_thermal_mean, queue_size=1)
     rospy.Subscriber("/coverage/capture_ready", Bool, cb_capture_ready, queue_size=50)
+    topic_types = {}
+    try:
+        topic_types = {name: t for name, t in rospy.get_published_topics()}
+    except Exception:
+        topic_types = {}
+    voltage_type = topic_types.get("/voltage")
+    if voltage_type == "transbot_msgs/Battery" and TransbotBattery is not None:
+        rospy.Subscriber("/voltage", TransbotBattery, cb_voltage_battery, queue_size=1)
+    elif voltage_type == "std_msgs/Float32":
+        rospy.Subscriber("/voltage", Float32, cb_voltage_float, queue_size=1)
+    else:
+        rospy.Subscriber("/voltage", Float64, cb_voltage_float, queue_size=1)
     if bridge:
         rospy.Subscriber("/sensors/thermal/image", Image, cb_thermal_image, queue_size=1)
         rospy.Subscriber("/camera/color/image_raw", Image, cb_rgb_image, queue_size=1)
@@ -156,6 +205,8 @@ def get_latest_from_ros() -> Dict[str, Any]:
             "thermal_mean": _ros_cache["thermal_mean"],
             "thermal_image_path": _ros_cache["thermal_image_path"],
             "rgb_image_path": _ros_cache["rgb_image_path"],
+            "voltage": _ros_cache["voltage"],
+            "battery_percent": _ros_cache["battery_percent"],
         }
 
 

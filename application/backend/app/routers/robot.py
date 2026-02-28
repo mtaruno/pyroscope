@@ -9,6 +9,8 @@ from app.schemas.robot import RobotStatusCreate, RobotStatusResponse
 from app.schemas.response import RobotStatusResponse as RobotStatusCreateResponse
 from app.utils.validators import validate_operating_state
 from app.services.waypoint_capture_service import start_capture_loop, stop_capture_loop, get_capture_progress
+from app.services.ros_sensor_bridge import is_ros_configured, start_ros_bridge, get_latest_from_ros
+from app.config import settings
 import subprocess
 import os
 import signal
@@ -19,6 +21,17 @@ router = APIRouter(prefix="/robot", tags=["Robot Status"])
 
 # Store active mission process
 mission_process = None
+
+
+def _ensure_ros_bridge_for_status() -> None:
+    """Ensure ROS bridge is running so /voltage can be consumed for battery status."""
+    if not is_ros_configured():
+        return
+    thermal_dir = os.path.join(settings.UPLOAD_DIR, "thermal_latest")
+    rgb_dir = os.path.join(settings.UPLOAD_DIR, "realsense_latest")
+    os.makedirs(thermal_dir, exist_ok=True)
+    os.makedirs(rgb_dir, exist_ok=True)
+    start_ros_bridge(thermal_dir, rgb_dir)
 
 
 @router.post("/status", response_model=RobotStatusCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -266,6 +279,10 @@ async def get_mission_progress():
 @router.get("/{robot_id}/status", response_model=RobotStatusResponse)
 async def get_robot_status(robot_id: str, db: Session = Depends(get_db)):
     """Get latest robot status"""
+    _ensure_ros_bridge_for_status()
+    ros_data = get_latest_from_ros()
+    ros_battery = ros_data.get("battery_percent")
+
     robot_status = (
         db.query(RobotStatus)
         .filter(RobotStatus.robot_id == robot_id)
@@ -274,14 +291,26 @@ async def get_robot_status(robot_id: str, db: Session = Depends(get_db)):
     )
 
     if not robot_status:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Robot status not found"
+        if ros_battery is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Robot status not found"
+            )
+        return RobotStatusResponse(
+            robot_id=robot_id,
+            battery_level=int(ros_battery),
+            storage_used=None,
+            storage_total=None,
+            signal_strength="Good",
+            operating_state="idle",
+            latitude=None,
+            longitude=None,
+            recorded_at=datetime.utcnow(),
         )
 
     return RobotStatusResponse(
         robot_id=robot_status.robot_id,
-        battery_level=robot_status.battery_level,
+        battery_level=int(ros_battery) if ros_battery is not None else robot_status.battery_level,
         storage_used=float(robot_status.storage_used) if robot_status.storage_used else None,
         storage_total=float(robot_status.storage_total) if robot_status.storage_total else None,
         signal_strength=robot_status.signal_strength,

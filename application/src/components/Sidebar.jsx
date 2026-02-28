@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Edit2, MapPin, Activity, Thermometer, History, Target, Pause, Play, Square, RefreshCw } from 'lucide-react'
+import { Edit2, MapPin, Activity, History, Target, Pause, Play, Square, RefreshCw } from 'lucide-react'
 import './Sidebar.css'
 
 function Sidebar({
@@ -7,7 +7,6 @@ function Sidebar({
   setLocationData,
   scanTarget,
   robotStatus,
-  environmentalData,
   scanHistory,
   isScanning,
   isPaused,
@@ -249,40 +248,6 @@ function Sidebar({
             <span className="info-label">Operating State:</span>
             <span className={`info-value status-${robotStatus.operatingState.toLowerCase()}`}>
               {robotStatus.operatingState}
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* Environmental Data */}
-      <section className="sidebar-section">
-        <h3 className="section-title">
-          <Thermometer size={16} />
-          Environmental Data
-        </h3>
-        <div className="info-card">
-          <div className="info-row">
-            <span className="info-label">Air Temperature:</span>
-            <span className="info-value">
-              {environmentalData.airTemperature !== null
-                ? `${environmentalData.airTemperature} °C`
-                : '— °C'}
-            </span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">Air Humidity:</span>
-            <span className="info-value">
-              {environmentalData.airHumidity !== null
-                ? `${environmentalData.airHumidity} %`
-                : '— %'}
-            </span>
-          </div>
-          <div className="info-row">
-            <span className="info-label">Wind Speed:</span>
-            <span className="info-value">
-              {environmentalData.windSpeed !== null
-                ? `${environmentalData.windSpeed} m/s`
-                : '— m/s'}
             </span>
           </div>
         </div>
