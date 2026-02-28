@@ -24,6 +24,12 @@ class Settings(BaseSettings):
     # On PC: set ROS_MASTER_URI=http://<JETSON_IP>:11311 and ROS_IP=<PC_IP> (e.g. in .env)
     ROS_MASTER_URI: Optional[str] = ""
     ROS_IP: Optional[str] = ""
+
+    # Fuel estimation (AI2/Wildlands API)
+    FUEL_ESTIMATION_API_URL: Optional[str] = ""
+    FUEL_ESTIMATION_TIMEOUT: int = 60
+    FUEL_ESTIMATION_API_KEY: Optional[str] = ""
+    FUEL_ESTIMATION_HEADLESS: bool = True
     
     @property
     def cors_origins_list(self) -> List[str]:

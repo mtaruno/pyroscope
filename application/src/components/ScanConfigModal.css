@@ -1,0 +1,86 @@
+.scan-config-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.scan-config-content {
+  width: min(560px, 92vw);
+  background: var(--bg-main, #1a1a1a);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 20px;
+}
+
+.scan-config-title {
+  margin: 0 0 14px;
+  font-size: 1.1rem;
+}
+
+.scan-config-group {
+  margin-bottom: 14px;
+}
+
+.scan-config-label {
+  margin: 0 0 8px;
+  opacity: 0.9;
+  font-size: 0.9rem;
+}
+
+.scan-config-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.scan-config-option {
+  border: 1px solid var(--border-light);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.scan-config-option.active {
+  border-color: var(--primary-green);
+  color: var(--primary-green);
+}
+
+.scan-config-summary {
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.scan-config-summary p {
+  margin: 4px 0;
+}
+
+.scan-config-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.scan-config-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.scan-config-btn.cancel {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.scan-config-btn.confirm {
+  background: var(--primary-green);
+  color: white;
+}

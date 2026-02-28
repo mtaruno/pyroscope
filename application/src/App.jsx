@@ -4,11 +4,9 @@ import MapView from './components/MapView'
 import DataLog from './components/DataLog'
 import ScanResults from './components/ScanResults'
 import SensorPanel from './components/SensorPanel'
+import ScanConfigModal from './components/ScanConfigModal'
 import apiClient from './services/api'
 import './App.css'
-
-// 🔧 TOGGLE: Set to false to disable robot mission launch (UI-only mode)
-const ENABLE_ROBOT_MISSION = false
 
 function App() {
   const [locationData, setLocationData] = useState({
@@ -61,17 +59,15 @@ function App() {
   const [scanPhase, setScanPhase] = useState('')
   const [showResults, setShowResults] = useState(false)
   const [scanResultData, setScanResultData] = useState(null)
-  const scanIntervalRef = useRef(null)
   const [activeScanId, setActiveScanId] = useState(null)
   const [latestCapture, setLatestCapture] = useState(null)
   const latestCapturePollRef = useRef(null)
-  // Scan modal: live ROS snapshot every 5s, 20 times, then "Scan finish" and close
-  const [showScanModal, setShowScanModal] = useState(false)
-  const [scanModalSnapshot, setScanModalSnapshot] = useState(null)
-  const [scanModalTick, setScanModalTick] = useState(0)
-  const [scanModalFinished, setScanModalFinished] = useState(false)
-  const scanModalIntervalRef = useRef(null)
-  const scanModalCloseTimeoutRef = useRef(null)
+  const [showScanConfigModal, setShowScanConfigModal] = useState(false)
+  const [capturedPoints, setCapturedPoints] = useState(0)
+  const [totalPoints, setTotalPoints] = useState(0)
+  const [showFuelUploadPrompt, setShowFuelUploadPrompt] = useState(false)
+  const [isFuelUploading, setIsFuelUploading] = useState(false)
+  const finishHandledRef = useRef(false)
 
   // Load scans from API on component mount
   useEffect(() => {
@@ -187,183 +183,40 @@ function App() {
     return () => clearInterval(statusInterval)
   }, [])
 
-  // Simulate scan progress
+  // Poll mission progress to update real progress based on capture-ready count / total points.
   useEffect(() => {
-    if (isScanning && !isPaused) {
-      if (scanProgress === 0) {
-        setScanPhase('Initializing...')
-      }
-
-      scanIntervalRef.current = setInterval(() => {
-        setScanProgress(prev => {
-          const newProgress = prev + Math.random() * 2 + 0.5
-
-          // Update phase based on progress
-          if (newProgress < 10) {
-            setScanPhase('Initializing sensors...')
-          } else if (newProgress < 25) {
-            setScanPhase('Calibrating thermal camera...')
-          } else if (newProgress < 40) {
-            setScanPhase('Scanning quadrant 1/4...')
-          } else if (newProgress < 55) {
-            setScanPhase('Scanning quadrant 2/4...')
-          } else if (newProgress < 70) {
-            setScanPhase('Scanning quadrant 3/4...')
-          } else if (newProgress < 85) {
-            setScanPhase('Scanning quadrant 4/4...')
-          } else if (newProgress < 95) {
-            setScanPhase('Processing data...')
-          } else {
-            setScanPhase('Finalizing report...')
-          }
-
-          if (newProgress >= 100) {
-            clearInterval(scanIntervalRef.current)
-            setIsScanning(false)
-            setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
-            setScanPhase('Scan complete!')
-
-            const currentScanId = activeScanId
-            setActiveScanId(null)
-            setLatestCapture(null)
-
-            setTimeout(async () => {
-              if (currentScanId) {
-                try {
-                  const scanDetail = await apiClient.getScanDetail(currentScanId).catch(() => null)
-                  if (scanDetail) {
-                    const data = {
-                      id: scanDetail.id,
-                      zoneId: scanDetail.zone_id || 'Unknown',
-                      location: `Area ${scanDetail.zone_id}`,
-                      areaSize: scanDetail.scan_area || '50 m × 50 m',
-                      duration: scanDetail.duration || 'N/A',
-                      completedAt: scanDetail.completed_at ? new Date(scanDetail.completed_at).toLocaleString() : 'N/A',
-                      riskLevel: (scanDetail.risk_level || 'medium').charAt(0).toUpperCase() + (scanDetail.risk_level || '').slice(1),
-                      avgPlantTemp: scanDetail.avg_plant_temp || 0,
-                      avgAirTemp: scanDetail.avg_air_temp || 0,
-                      tempDiff: scanDetail.temp_diff || 0,
-                      fuel_load: scanDetail.fuel_load,
-                      one_hour_fuel: scanDetail.one_hour_fuel,
-                      ten_hour_fuel: scanDetail.ten_hour_fuel,
-                      hundred_hour_fuel: scanDetail.hundred_hour_fuel,
-                      pine_cone_count: scanDetail.pine_cone_count,
-                      fuelLoad: scanDetail.fuel_load || 'Unknown',
-                      fuelDensity: scanDetail.fuel_density || 0,
-                      biomass: scanDetail.biomass || 0,
-                      recommendations: ['View detailed analysis', 'Check environmental data', 'Review scan images'],
-                      latitude: scanDetail.latitude != null ? String(scanDetail.latitude) : '0',
-                      longitude: scanDetail.longitude != null ? String(scanDetail.longitude) : '0',
-                      images: scanDetail.images || []
-                    }
-                    setScanResultData(data)
-                    setShowResults(true)
-                  }
-                  apiClient.getScans({ limit: 50 }).then(res => {
-                    if (res?.scans) {
-                      const markers = res.scans.map(scan => ({
-                        id: scan.id,
-                        lat: scan.latitude,
-                        lng: scan.longitude,
-                        riskLevel: scan.risk_level || 'medium',
-                        scanData: {
-                          zoneId: scan.zone_id || 'Unknown',
-                          location: `Area ${scan.zone_id}`,
-                          areaSize: scan.scan_area || '50 m × 50 m',
-                          duration: scan.duration || 'N/A',
-                          completedAt: scan.completed_at ? new Date(scan.completed_at).toLocaleString() : 'N/A',
-                          riskLevel: scan.risk_level ? scan.risk_level.charAt(0).toUpperCase() + scan.risk_level.slice(1) : 'Medium',
-                          avgPlantTemp: scan.avg_plant_temp || 0,
-                          avgAirTemp: scan.avg_air_temp || 0,
-                          tempDiff: scan.temp_diff || 0,
-                          fuelLoad: scan.fuel_load || 'Unknown',
-                          fuelDensity: scan.fuel_density || 0,
-                          biomass: scan.biomass || 0,
-                          recommendations: ['View detailed analysis', 'Check environmental data', 'Review scan images'],
-                          latitude: String(scan.latitude),
-                          longitude: String(scan.longitude)
-                        }
-                      }))
-                      setMapMarkers(markers)
-                    }
-                  }).catch(err => console.error('Failed to reload scans:', err))
-                } catch (error) {
-                  console.error('Failed to load scan result:', error)
-                }
-              }
-            }, 1000)
-
-            return 100
-          }
-          return newProgress
-        })
-      }, 500)
-    }
-
-    return () => {
-      if (scanIntervalRef.current) {
-        clearInterval(scanIntervalRef.current)
-      }
-    }
-  }, [isScanning, isPaused, activeScanId])
-
-  // Scan modal: poll live snapshot every 5s, 20 times, then "Scan finish" and close after 2s
-  useEffect(() => {
-    if (!showScanModal || !isScanning) {
-      if (scanModalIntervalRef.current) {
-        clearInterval(scanModalIntervalRef.current)
-        scanModalIntervalRef.current = null
-      }
-      if (scanModalCloseTimeoutRef.current) {
-        clearTimeout(scanModalCloseTimeoutRef.current)
-        scanModalCloseTimeoutRef.current = null
-      }
-      return
-    }
-    if (scanModalFinished) {
-      scanModalCloseTimeoutRef.current = setTimeout(() => {
-        setShowScanModal(false)
-        setScanModalTick(0)
-        setScanModalFinished(false)
-        setScanModalSnapshot(null)
-        scanModalCloseTimeoutRef.current = null
-      }, 2000)
-      return () => {
-        if (scanModalCloseTimeoutRef.current) clearTimeout(scanModalCloseTimeoutRef.current)
-      }
-    }
+    if (!isScanning || !activeScanId) return
     const poll = async () => {
       try {
-        const data = await apiClient.getLiveSnapshot()
-        setScanModalSnapshot(data)
-        setScanModalTick(prev => {
-          if (prev + 1 >= 20) {
-            if (scanModalIntervalRef.current) {
-              clearInterval(scanModalIntervalRef.current)
-              scanModalIntervalRef.current = null
-            }
-            setScanModalFinished(true)
-          }
-          return prev + 1
-        })
-      } catch (e) {
-        console.error('Live snapshot poll failed:', e)
-        setScanModalTick(prev => prev + 1)
+        const progress = await apiClient.getMissionProgress()
+        const nextCaptured = progress?.captured_points || 0
+        const nextTotal = progress?.total_points || totalPoints || 0
+        const nextPercent = progress?.progress_percent || 0
+
+        setCapturedPoints(nextCaptured)
+        setTotalPoints(nextTotal)
+        setScanProgress(nextPercent)
+        setScanPhase(
+          nextTotal > 0
+            ? `Captured ${nextCaptured}/${nextTotal} points`
+            : `Captured ${nextCaptured} point(s)`
+        )
+
+        if (progress?.status === 'completed' && !finishHandledRef.current) {
+          finishHandledRef.current = true
+          setIsScanning(false)
+          setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
+          setScanPhase('Scan complete')
+          setShowFuelUploadPrompt(true)
+        }
+      } catch (error) {
+        console.error('Mission progress poll failed:', error)
       }
     }
     poll()
-    scanModalIntervalRef.current = setInterval(poll, 5000)
-    return () => {
-      if (scanModalIntervalRef.current) {
-        clearInterval(scanModalIntervalRef.current)
-        scanModalIntervalRef.current = null
-      }
-      if (scanModalCloseTimeoutRef.current) {
-        clearTimeout(scanModalCloseTimeoutRef.current)
-        scanModalCloseTimeoutRef.current = null
-      }
-    }
-  }, [showScanModal, isScanning, scanModalFinished])
+    const progressInterval = setInterval(poll, 1000)
+    return () => clearInterval(progressInterval)
+  }, [isScanning, activeScanId, totalPoints])
 
   // Poll latest waypoint capture while scanning
   useEffect(() => {
@@ -389,48 +242,93 @@ function App() {
     }
   }, [isScanning, activeScanId])
 
-  const handleStartScan = async () => {
-    // Only call backend if robot mission enabled
-    if (ENABLE_ROBOT_MISSION) {
-      try {
-        const missionConfig = {
-          area_width: 5.0,
-          area_height: 5.0,
-          row_spacing: 0.8,
-          waypoint_spacing: 0.5,
-          origin_x: 0.0,
-          origin_y: 0.0,
-          dwell_time: 2.0,
-          waypoint_timeout: 30.0
-        }
-        const response = await apiClient.startCoverageMission(missionConfig)
-        const scanId = response?.scan_id ?? null
-        if (scanId) setActiveScanId(scanId)
-        setLatestCapture(null)
-        console.log('Coverage mission started on robot', scanId ? `scan_id=${scanId}` : '')
-      } catch (error) {
-        console.error('Failed to start coverage mission:', error)
-        alert(`Failed to start mission: ${error.message}`)
-        return
-      }
-    } else {
-      console.log('⚠️ Robot mission disabled (ENABLE_ROBOT_MISSION = false) - UI-only mode')
-    }
+  const buildScanDataFromDetail = (scanDetail) => ({
+    id: scanDetail.id,
+    zoneId: scanDetail.zone_id || 'Unknown',
+    location: `Area ${scanDetail.zone_id}`,
+    areaSize: scanDetail.scan_area || '50 m × 50 m',
+    duration: scanDetail.duration || 'N/A',
+    completedAt: scanDetail.completed_at ? new Date(scanDetail.completed_at).toLocaleString() : 'N/A',
+    riskLevel: (scanDetail.risk_level || 'medium').charAt(0).toUpperCase() + (scanDetail.risk_level || '').slice(1),
+    avgPlantTemp: scanDetail.avg_plant_temp || 0,
+    avgAirTemp: scanDetail.avg_air_temp || 0,
+    tempDiff: scanDetail.temp_diff || 0,
+    fuel_load: scanDetail.fuel_load,
+    one_hour_fuel: scanDetail.one_hour_fuel,
+    ten_hour_fuel: scanDetail.ten_hour_fuel,
+    hundred_hour_fuel: scanDetail.hundred_hour_fuel,
+    pine_cone_count: scanDetail.pine_cone_count,
+    fuelLoad: scanDetail.fuel_load || 'Unknown',
+    fuelDensity: scanDetail.fuel_density || 0,
+    biomass: scanDetail.biomass || 0,
+    recommendations: ['View detailed analysis', 'Check environmental data', 'Review scan images'],
+    latitude: scanDetail.latitude != null ? String(scanDetail.latitude) : '0',
+    longitude: scanDetail.longitude != null ? String(scanDetail.longitude) : '0',
+    images: scanDetail.images || []
+  })
 
-    setIsScanning(true)
-    setIsPaused(false)
-    setScanProgress(0)
-    setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
-    setShowScanModal(true)
-    setScanModalTick(0)
-    setScanModalFinished(false)
-    setScanModalSnapshot(null)
+  const loadAndShowScanResult = async (scanId) => {
+    if (!scanId) return
+    try {
+      const scanDetail = await apiClient.getScanDetail(scanId).catch(() => null)
+      if (scanDetail) {
+        setScanResultData(buildScanDataFromDetail(scanDetail))
+        setShowResults(true)
+      }
+    } catch (error) {
+      console.error('Failed to load scan result:', error)
+    }
+  }
+
+  const handleStartScan = () => {
+    setShowScanConfigModal(true)
+  }
+
+  const handleConfirmStartScan = async ({ areaSize, precision, totalPoints: configuredTotal }) => {
+    setShowScanConfigModal(false)
+    try {
+      const missionConfig = {
+        area_size_m: areaSize,
+        sampling_precision_m: precision,
+        area_width: areaSize,
+        area_height: areaSize,
+        row_spacing: precision,
+        waypoint_spacing: precision,
+        origin_x: 0.0,
+        origin_y: 0.0,
+        dwell_time: 2.0,
+        waypoint_timeout: 30.0
+      }
+      const response = await apiClient.startCoverageMission(missionConfig)
+      const scanId = response?.scan_id ?? null
+      if (!scanId) {
+        throw new Error('Mission started but scan_id is missing')
+      }
+      finishHandledRef.current = false
+      setActiveScanId(scanId)
+      setLatestCapture(null)
+      setIsScanning(true)
+      setIsPaused(false)
+      setCapturedPoints(response?.captured_points || 0)
+      setTotalPoints(response?.total_points || configuredTotal || 0)
+      setScanProgress(response?.progress_percent || 0)
+      setScanPhase('Waiting for /coverage/capture_ready = true ...')
+      setShowFuelUploadPrompt(false)
+      const plannedPoints = response?.total_points || configuredTotal || 0
+      const estimatedMinutes = Math.max(1, Math.round((plannedPoints * 2) / 60))
+      setScanConfig({
+        scanArea: `${areaSize} m × ${areaSize} m`,
+        boundaryArea: `${areaSize} m × ${areaSize} m`,
+        estimatedDuration: `~ ${estimatedMinutes} min`
+      })
+      setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
+    } catch (error) {
+      console.error('Failed to start coverage mission:', error)
+      alert(`Failed to start mission: ${error.message}`)
+    }
   }
 
   const handlePauseScan = () => {
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current)
-    }
     setIsPaused(true)
     setScanPhase('Paused')
     setRobotStatus(prev => ({ ...prev, operatingState: 'Paused' }))
@@ -442,62 +340,41 @@ function App() {
   }
 
   const handleStopScan = async () => {
-    // Only call backend if robot mission enabled
-    if (ENABLE_ROBOT_MISSION) {
-      try {
-        await apiClient.stopCoverageMission()
-        console.log('Coverage mission stopped on robot')
-      } catch (error) {
-        console.error('Failed to stop coverage mission:', error.message)
-      }
-    } else {
-      console.log('⚠️ Robot mission disabled - skipping stop call')
+    try {
+      await apiClient.stopCoverageMission()
+      console.log('Coverage mission stopped on robot')
+    } catch (error) {
+      console.error('Failed to stop coverage mission:', error.message)
     }
-    if (scanIntervalRef.current) {
-      clearInterval(scanIntervalRef.current)
-    }
-    setShowScanModal(false)
     setIsScanning(false)
     setIsPaused(false)
     setScanProgress(0)
     setScanPhase('')
+    setCapturedPoints(0)
+    setTotalPoints(0)
+    setShowScanConfigModal(false)
     setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
     if (activeScanId) {
-      try {
-        const scanDetail = await apiClient.getScanDetail(activeScanId).catch(() => null)
-        if (scanDetail) {
-          const data = {
-            id: scanDetail.id,
-            zoneId: scanDetail.zone_id || 'Unknown',
-            location: `Area ${scanDetail.zone_id}`,
-            areaSize: scanDetail.scan_area || '50 m × 50 m',
-            duration: scanDetail.duration || 'N/A',
-            completedAt: scanDetail.completed_at ? new Date(scanDetail.completed_at).toLocaleString() : 'N/A',
-            riskLevel: (scanDetail.risk_level || 'medium').charAt(0).toUpperCase() + (scanDetail.risk_level || '').slice(1),
-            avgPlantTemp: scanDetail.avg_plant_temp || 0,
-            avgAirTemp: scanDetail.avg_air_temp || 0,
-            tempDiff: scanDetail.temp_diff || 0,
-            fuel_load: scanDetail.fuel_load,
-            one_hour_fuel: scanDetail.one_hour_fuel,
-            ten_hour_fuel: scanDetail.ten_hour_fuel,
-            hundred_hour_fuel: scanDetail.hundred_hour_fuel,
-            pine_cone_count: scanDetail.pine_cone_count,
-            fuelLoad: scanDetail.fuel_load || 'Unknown',
-            fuelDensity: scanDetail.fuel_density || 0,
-            biomass: scanDetail.biomass || 0,
-            recommendations: ['View detailed analysis', 'Check environmental data', 'Review scan images'],
-            latitude: scanDetail.latitude != null ? String(scanDetail.latitude) : '0',
-            longitude: scanDetail.longitude != null ? String(scanDetail.longitude) : '0',
-            images: scanDetail.images || []
-          }
-          setScanResultData(data)
-          setShowResults(true)
-        }
-      } catch (e) {
-        console.error('Failed to load scan after stop:', e)
-      }
+      await loadAndShowScanResult(activeScanId)
       setActiveScanId(null)
       setLatestCapture(null)
+    }
+  }
+
+  const handleFuelUploadConfirm = async () => {
+    if (!activeScanId) return
+    try {
+      setIsFuelUploading(true)
+      await apiClient.estimateFuelForScan(activeScanId)
+      await loadAndShowScanResult(activeScanId)
+      setShowFuelUploadPrompt(false)
+      setActiveScanId(null)
+      setLatestCapture(null)
+    } catch (error) {
+      console.error('Fuel estimation failed:', error)
+      alert(`Fuel estimation failed: ${error.message}`)
+    } finally {
+      setIsFuelUploading(false)
     }
   }
 
@@ -654,59 +531,39 @@ function App() {
         )}
         <DataLog logs={scanLogs} />
       </main>
-      {showScanModal && (
-        <div className="scan-modal-overlay" role="dialog" aria-label="Live scan snapshot">
+      <ScanConfigModal
+        open={showScanConfigModal}
+        onCancel={() => setShowScanConfigModal(false)}
+        onConfirm={handleConfirmStartScan}
+      />
+      {showFuelUploadPrompt && (
+        <div className="scan-modal-overlay" role="dialog" aria-label="Fuel estimation upload prompt">
           <div className="scan-modal-content">
-            <button
-              type="button"
-              className="scan-modal-close"
-              onClick={() => {
-                setShowScanModal(false)
-                setScanModalTick(0)
-                setScanModalFinished(false)
-                setScanModalSnapshot(null)
-              }}
-              aria-label="Close"
-            >
-              ×
-            </button>
-            {scanModalFinished ? (
-              <p className="scan-modal-finish">Scan finish</p>
-            ) : (
-              <>
-                <h3 className="latest-capture-title">Live ROS snapshot</h3>
-                <div className="latest-capture-content">
-                  {scanModalSnapshot?.rgb_image_url && (
-                    <div className="latest-capture-image-wrap">
-                      <p className="latest-capture-img-label">RGB (RealSense)</p>
-                      <img
-                        key={`rgb-${scanModalTick}`}
-                        src={`${apiClient.getBaseUrl()}${scanModalSnapshot.rgb_image_url}?t=${scanModalTick}`}
-                        alt="Live RGB"
-                        className="latest-capture-image"
-                      />
-                    </div>
-                  )}
-                  {scanModalSnapshot?.thermal_image_url && (
-                    <div className="latest-capture-image-wrap">
-                      <p className="latest-capture-img-label">Thermal</p>
-                      <img
-                        key={`thermal-${scanModalTick}`}
-                        src={`${apiClient.getBaseUrl()}${scanModalSnapshot.thermal_image_url}?t=${scanModalTick}`}
-                        alt="Live thermal"
-                        className="latest-capture-image"
-                      />
-                    </div>
-                  )}
-                  <div className="latest-capture-fields">
-                    <p>Temperature: <strong>{(latestCapture?.air_temperature ?? scanModalSnapshot?.temperature) != null ? `${latestCapture?.air_temperature ?? scanModalSnapshot?.temperature} °C` : '---'}</strong></p>
-                    <p>Humidity: <strong>{(latestCapture?.air_humidity ?? scanModalSnapshot?.humidity) != null ? `${latestCapture?.air_humidity ?? scanModalSnapshot?.humidity} %` : '---'}</strong></p>
-                    <p>Thermal mean: <strong>{(latestCapture?.thermal_mean ?? scanModalSnapshot?.thermal_mean) != null ? `${latestCapture?.thermal_mean ?? scanModalSnapshot?.thermal_mean} °C` : '---'}</strong></p>
-                    <p className="scan-modal-tick">Snapshot {scanModalTick}/20</p>
-                  </div>
-                </div>
-              </>
-            )}
+            <h3 className="latest-capture-title">Scan finished</h3>
+            <p>Start automatic image upload to AI2 API for fuel load estimation?</p>
+            <div className="scan-prompt-actions">
+              <button
+                type="button"
+                className="scan-prompt-btn scan-prompt-cancel"
+                onClick={() => {
+                  setShowFuelUploadPrompt(false)
+                  loadAndShowScanResult(activeScanId)
+                  setActiveScanId(null)
+                  setLatestCapture(null)
+                }}
+                disabled={isFuelUploading}
+              >
+                Skip
+              </button>
+              <button
+                type="button"
+                className="scan-prompt-btn scan-prompt-confirm"
+                onClick={handleFuelUploadConfirm}
+                disabled={isFuelUploading}
+              >
+                {isFuelUploading ? 'Uploading...' : 'Upload to AI2'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -135,6 +135,16 @@ class ApiClient {
     return this.request('/robot/mission/status');
   }
 
+  async getMissionProgress() {
+    return this.request('/robot/mission/progress');
+  }
+
+  async estimateFuelForScan(scanId) {
+    return this.request(`/images/estimate-fuel/${scanId}`, {
+      method: 'POST'
+    });
+  }
+
   // Real-time Sensors
   async getLatestSensors() {
     return this.request('/sensors/latest');

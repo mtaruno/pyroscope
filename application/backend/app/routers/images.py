@@ -25,6 +25,7 @@ async def upload_image(
     longitude: Optional[float] = Form(None),
     captured_at: Optional[str] = Form(None),
     metadata: Optional[str] = Form(None),
+    estimate_fuel: Optional[bool] = Form(False),
     db: Session = Depends(get_db)
 ):
     """Upload an image for a scan"""
@@ -74,17 +75,22 @@ async def upload_image(
         latitude=latitude,
         longitude=longitude,
         captured_at=captured_datetime,
-        metadata=metadata_dict
+        meta_data=metadata_dict
     )
     
     db.add(scan_image)
     db.commit()
     db.refresh(scan_image)
     
+    fuel_estimation = None
+    if estimate_fuel:
+        fuel_estimation = image_service.estimate_fuel_for_scan(db, scan_id)
+
     return ImageUploadResponse(
         image_id=scan_image.id,
         file_path=file_info["file_path"],
-        url=f"/api/images/{scan_image.id}"
+        url=f"/api/images/{scan_image.id}",
+        fuel_estimation=fuel_estimation if fuel_estimation and fuel_estimation.get("success") else None,
     )
 
 
@@ -109,3 +115,23 @@ async def get_image(image_id: int, db: Session = Depends(get_db)):
         image.file_path,
         media_type=image.mime_type or "image/jpeg"
     )
+
+
+@router.post("/estimate-fuel/{scan_id}")
+async def estimate_fuel_for_scan(scan_id: int, db: Session = Depends(get_db)):
+    """Estimate fuel load for all visible images in a scan and backfill scan record."""
+    scan = db.query(ScanRecord).filter(ScanRecord.id == scan_id).first()
+    if not scan:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Scan not found",
+        )
+
+    image_service = ImageService()
+    result = image_service.estimate_fuel_for_scan(db, scan_id)
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.get("error", "Fuel estimation failed"),
+        )
+    return result

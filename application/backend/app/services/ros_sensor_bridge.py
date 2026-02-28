@@ -6,6 +6,7 @@ Subscribed topics:
   /sensors/thermal/mean        (std_msgs/Float64)
   /sensors/thermal/image       (sensor_msgs/Image)
   /camera/color/image_raw      (sensor_msgs/Image)  -- RealSense D435i RGB
+  /coverage/capture_ready      (std_msgs/Bool)      -- True triggers one capture
 Run only when ROS_MASTER_URI is set; runs in a background thread.
 """
 
@@ -19,7 +20,9 @@ _ros_cache: Dict[str, Any] = {
     "thermal_mean": None,
     "thermal_image_path": None,
     "rgb_image_path": None,
+    "capture_ready_queue": [],
     "lock": threading.Lock(),
+    "capture_ready_condition": threading.Condition(),
 }
 _ros_thread: Optional[threading.Thread] = None
 _ros_stop = threading.Event()
@@ -29,7 +32,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
     """Run rospy node and subscribe to sensor topics; update _ros_cache."""
     try:
         import rospy
-        from std_msgs.msg import Float64
+        from std_msgs.msg import Float64, Bool
         from sensor_msgs.msg import Image
     except ImportError as e:
         import logging
@@ -84,10 +87,19 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         except Exception:
             pass
 
+    def cb_capture_ready(msg):
+        # Consume only True events; each True means "capture once".
+        if msg.data is not True:
+            return
+        with _ros_cache["capture_ready_condition"]:
+            _ros_cache["capture_ready_queue"].append(True)
+            _ros_cache["capture_ready_condition"].notify_all()
+
     rospy.init_node("waypoint_capture_bridge", anonymous=True, disable_signals=True)
     rospy.Subscriber("/sensors/sht40/temperature", Float64, cb_temp, queue_size=1)
     rospy.Subscriber("/sensors/sht40/humidity", Float64, cb_hum, queue_size=1)
     rospy.Subscriber("/sensors/thermal/mean", Float64, cb_thermal_mean, queue_size=1)
+    rospy.Subscriber("/coverage/capture_ready", Bool, cb_capture_ready, queue_size=50)
     if bridge:
         rospy.Subscriber("/sensors/thermal/image", Image, cb_thermal_image, queue_size=1)
         rospy.Subscriber("/camera/color/image_raw", Image, cb_rgb_image, queue_size=1)
@@ -138,6 +150,24 @@ def get_latest_from_ros() -> Dict[str, Any]:
             "thermal_image_path": _ros_cache["thermal_image_path"],
             "rgb_image_path": _ros_cache["rgb_image_path"],
         }
+
+
+def wait_for_next_capture_ready(timeout_sec: float = 0.5) -> bool:
+    """Wait and consume one capture trigger from /coverage/capture_ready."""
+    condition = _ros_cache["capture_ready_condition"]
+    with condition:
+        if not _ros_cache["capture_ready_queue"]:
+            condition.wait(timeout=timeout_sec)
+        if not _ros_cache["capture_ready_queue"]:
+            return False
+        _ros_cache["capture_ready_queue"].pop(0)
+        return True
+
+
+def clear_capture_ready_queue() -> None:
+    condition = _ros_cache["capture_ready_condition"]
+    with condition:
+        _ros_cache["capture_ready_queue"].clear()
 
 
 def is_ros_configured() -> bool:

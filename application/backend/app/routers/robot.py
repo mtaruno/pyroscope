@@ -8,11 +8,12 @@ from app.models.scan import ScanRecord
 from app.schemas.robot import RobotStatusCreate, RobotStatusResponse
 from app.schemas.response import RobotStatusResponse as RobotStatusCreateResponse
 from app.utils.validators import validate_operating_state
-from app.services.waypoint_capture_service import start_capture_loop, stop_capture_loop
+from app.services.waypoint_capture_service import start_capture_loop, stop_capture_loop, get_capture_progress
 import subprocess
 import os
 import signal
 from pydantic import BaseModel
+from typing import Optional
 
 router = APIRouter(prefix="/robot", tags=["Robot Status"])
 
@@ -50,14 +51,23 @@ async def update_robot_status(
 
 # Mission Config and Endpoints - MUST come before /{robot_id}/status route
 class MissionConfig(BaseModel):
-    area_width: float = 5.0
-    area_height: float = 5.0
+    area_size_m: float = 50.0
+    sampling_precision_m: float = 5.0
+    area_width: Optional[float] = None
+    area_height: Optional[float] = None
     row_spacing: float = 0.8
     waypoint_spacing: float = 0.5
     origin_x: float = 0.0
     origin_y: float = 0.0
     dwell_time: float = 2.0
     waypoint_timeout: float = 30.0
+
+
+def _calc_total_points(area_size_m: float, precision_m: float) -> int:
+    if precision_m <= 0:
+        return 0
+    points_per_side = int(round(area_size_m / precision_m)) + 1
+    return max(0, points_per_side * points_per_side)
 
 
 @router.post("/mission/start")
@@ -72,12 +82,19 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
         )
 
     try:
+        config = config or MissionConfig()
+        area_size_m = float(config.area_size_m)
+        precision_m = float(config.sampling_precision_m)
+        total_points = _calc_total_points(area_size_m, precision_m)
+        area_width = float(config.area_width) if config.area_width is not None else area_size_m
+        area_height = float(config.area_height) if config.area_height is not None else area_size_m
+
         # Create scan record (in progress) so we have scan_id for waypoint samples
         scan = ScanRecord(
             zone_id="A-01",
             latitude=34.2257,
             longitude=-117.8512,
-            scan_area="50 m × 50 m",
+            scan_area=f"{int(area_size_m)} m × {int(area_size_m)} m",
             completed_at=None,
         )
         db.add(scan)
@@ -101,14 +118,14 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
             f'source /opt/ros/melodic/setup.bash && '
             f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
             f'/opt/ros/melodic/bin/roslaunch pyroscope_navigation coverage_mission_nav.launch '
-            f'area_width:={config.area_width if config else 5.0} '
-            f'area_height:={config.area_height if config else 5.0} '
-            f'row_spacing:={config.row_spacing if config else 0.8} '
-            f'waypoint_spacing:={config.waypoint_spacing if config else 0.5} '
-            f'origin_x:={config.origin_x if config else 0.0} '
-            f'origin_y:={config.origin_y if config else 0.0} '
-            f'dwell_time:={config.dwell_time if config else 2.0} '
-            f'waypoint_timeout:={config.waypoint_timeout if config else 30.0}'
+            f'area_width:={area_width} '
+            f'area_height:={area_height} '
+            f'row_spacing:={config.row_spacing} '
+            f'waypoint_spacing:={config.waypoint_spacing} '
+            f'origin_x:={config.origin_x} '
+            f'origin_y:={config.origin_y} '
+            f'dwell_time:={config.dwell_time} '
+            f'waypoint_timeout:={config.waypoint_timeout}'
         )
         cmd = ['bash', '-c', ros_cmd]
 
@@ -122,15 +139,19 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
         except Exception:
             mission_process = None  # noqa: PLW0602
 
-        # Start waypoint capture loop (3s interval: SHT40 + thermal, store samples)
-        start_capture_loop(scan_id)
+        # Start waypoint capture loop (one sample per '/coverage/capture_ready'=true message).
+        start_capture_loop(scan_id, total_points=total_points)
+        progress = get_capture_progress()
 
         return {
             "status": "started",
             "message": "Coverage mission started successfully",
             "scan_id": scan_id,
             "pid": mission_process.pid if mission_process else None,
-            "config": config.dict() if config else {}
+            "config": config.dict(),
+            "captured_points": progress["captured_points"],
+            "total_points": progress["total_points"],
+            "progress_percent": progress["progress_percent"],
         }
 
     except Exception as e:
@@ -163,11 +184,15 @@ async def stop_coverage_mission(db: Session = Depends(get_db)):
         if scan and scan.completed_at is None:
             scan.completed_at = datetime.utcnow()
             db.commit()
+    progress = get_capture_progress()
 
     return {
         "status": "stopped",
         "message": "Coverage mission stopped successfully",
         "scan_id": stopped_scan_id,
+        "captured_points": progress["captured_points"],
+        "total_points": progress["total_points"],
+        "progress_percent": progress["progress_percent"],
     }
 
 
@@ -176,29 +201,65 @@ async def get_mission_status():
     """Get the current status of the coverage mission"""
     global mission_process
 
-    if mission_process is None:
+    progress = get_capture_progress()
+    active_scan_id = progress.get("scan_id")
+
+    if mission_process is None and not active_scan_id:
         return {
             "status": "idle",
             "running": False,
-            "message": "No mission has been started"
+            "captured_points": progress["captured_points"],
+            "total_points": progress["total_points"],
+            "progress_percent": progress["progress_percent"],
+            "message": "No mission has been started",
         }
 
-    if mission_process.poll() is None:
+    if active_scan_id and progress.get("status") == "running":
+        return {
+            "status": "running",
+            "running": True,
+            "pid": mission_process.pid if mission_process else None,
+            "scan_id": active_scan_id,
+            "captured_points": progress["captured_points"],
+            "total_points": progress["total_points"],
+            "progress_percent": progress["progress_percent"],
+            "message": "Mission is currently running",
+        }
+
+    if mission_process is not None and mission_process.poll() is None:
         return {
             "status": "running",
             "running": True,
             "pid": mission_process.pid,
-            "message": "Mission is currently running"
+            "scan_id": active_scan_id,
+            "captured_points": progress["captured_points"],
+            "total_points": progress["total_points"],
+            "progress_percent": progress["progress_percent"],
+            "message": "Mission is currently running",
         }
     else:
-        return_code = mission_process.returncode
+        return_code = mission_process.returncode if mission_process else 0
         mission_process = None
         return {
             "status": "completed" if return_code == 0 else "failed",
             "running": False,
+            "scan_id": active_scan_id,
+            "captured_points": progress["captured_points"],
+            "total_points": progress["total_points"],
+            "progress_percent": progress["progress_percent"],
             "return_code": return_code,
-            "message": f"Mission completed with return code {return_code}"
+            "message": f"Mission completed with return code {return_code}",
         }
+
+
+@router.get("/mission/progress")
+async def get_mission_progress():
+    progress = get_capture_progress()
+    running = progress.get("status") == "running"
+    return {
+        "running": running,
+        **progress,
+    }
 
 
 # Robot Status Endpoint - MUST come AFTER mission endpoints to avoid route conflicts

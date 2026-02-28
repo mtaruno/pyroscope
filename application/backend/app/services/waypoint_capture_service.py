@@ -15,8 +15,15 @@ from datetime import datetime
 from app.database import SessionLocal
 from app.models.waypoint_sample import ScanWaypointSample
 from app.models.image import ScanImage, ImageType
+from app.models.scan import ScanRecord
 from app.config import settings
-from app.services.ros_sensor_bridge import is_ros_configured, start_ros_bridge, get_latest_from_ros
+from app.services.ros_sensor_bridge import (
+    is_ros_configured,
+    start_ros_bridge,
+    get_latest_from_ros,
+    wait_for_next_capture_ready,
+    clear_capture_ready_queue,
+)
 
 
 def _pyroscope_root() -> Path:
@@ -24,16 +31,21 @@ def _pyroscope_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent.parent
 
 
-WAYPOINT_INTERVAL_SEC = 3
 _sht40_script = _pyroscope_root() / "sht40_reader.py"
 _thermal_script = _pyroscope_root() / "thermal_capture.py"
+FALLBACK_INTERVAL_SEC = 3
 
 _capture_state = {
     "scan_id": None,
+    "status": "idle",
+    "captured_points": 0,
+    "total_points": None,
+    "last_capture_ready": False,
     "stop_event": None,
     "thread": None,
     "use_ros": False,
 }
+_capture_state_lock = threading.Lock()
 
 
 def _run_sht40_once(port: str = None) -> dict:
@@ -82,6 +94,19 @@ def _run_thermal_once(image_path: str = None, simulate: bool = False) -> dict:
     return {"thermal_mean": None, "image_path": None}
 
 
+def _mark_scan_completed(scan_id: int) -> None:
+    db = SessionLocal()
+    try:
+        scan = db.query(ScanRecord).filter(ScanRecord.id == scan_id).first()
+        if scan and scan.completed_at is None:
+            scan.completed_at = datetime.utcnow()
+            db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
 def _capture_loop_impl(scan_id: int):
     stop_event = _capture_state["stop_event"]
     if not stop_event:
@@ -98,9 +123,19 @@ def _capture_loop_impl(scan_id: int):
     simulate = not use_ros and not _sht40_script.exists()
 
     while not stop_event.is_set():
-        stop_event.wait(WAYPOINT_INTERVAL_SEC)
+        capture_ready = wait_for_next_capture_ready(timeout_sec=0.5) if use_ros else False
         if stop_event.is_set():
             break
+        if use_ros:
+            if not capture_ready:
+                continue
+            with _capture_state_lock:
+                _capture_state["last_capture_ready"] = True
+        else:
+            # Keep legacy behavior when ROS command stream is unavailable.
+            stop_event.wait(FALLBACK_INTERVAL_SEC)
+            if stop_event.is_set():
+                break
 
         rgb_waypoint_path = os.path.join(rgb_dir, f"waypoint_{sequence_index:04d}.jpg")
 
@@ -184,11 +219,24 @@ def _capture_loop_impl(scan_id: int):
         finally:
             db.close()
 
+        with _capture_state_lock:
+            _capture_state["captured_points"] = sequence_index + 1
+            total_points = _capture_state["total_points"]
         sequence_index += 1
+        if total_points and sequence_index >= total_points:
+            with _capture_state_lock:
+                _capture_state["status"] = "completed"
+            _mark_scan_completed(scan_id)
+            stop_event.set()
+            break
+
+    with _capture_state_lock:
+        if _capture_state["status"] not in ("completed", "stopped"):
+            _capture_state["status"] = "stopped"
 
 
-def start_capture_loop(scan_id: int) -> None:
-    """Start background thread that captures every WAYPOINT_INTERVAL_SEC (from ROS or subprocess)."""
+def start_capture_loop(scan_id: int, total_points: Optional[int] = None) -> None:
+    """Start background thread that captures on each ROS '/coverage/capture_ready'=true event."""
     if _capture_state["thread"] is not None and _capture_state["thread"].is_alive():
         return
     thermal_dir = os.path.join(settings.UPLOAD_DIR, "thermal_latest")
@@ -196,9 +244,15 @@ def start_capture_loop(scan_id: int) -> None:
     os.makedirs(thermal_dir, exist_ok=True)
     os.makedirs(rgb_dir, exist_ok=True)
     use_ros = is_ros_configured() and start_ros_bridge(thermal_dir, rgb_dir)
+    clear_capture_ready_queue()
     _capture_state["use_ros"] = use_ros
     _capture_state["stop_event"] = threading.Event()
-    _capture_state["scan_id"] = scan_id
+    with _capture_state_lock:
+        _capture_state["scan_id"] = scan_id
+        _capture_state["captured_points"] = 0
+        _capture_state["total_points"] = total_points
+        _capture_state["status"] = "running"
+        _capture_state["last_capture_ready"] = False
     _capture_state["thread"] = threading.Thread(
         target=_capture_loop_impl,
         args=(scan_id,),
@@ -209,10 +263,13 @@ def start_capture_loop(scan_id: int) -> None:
 
 def stop_capture_loop() -> Optional[int]:
     """Signal loop to stop and return current scan_id."""
-    _capture_state["stop_event"].set()
-    scan_id = _capture_state["scan_id"]
-    _capture_state["scan_id"] = None
-    _capture_state["stop_event"] = None
+    if _capture_state["stop_event"]:
+        _capture_state["stop_event"].set()
+    with _capture_state_lock:
+        scan_id = _capture_state["scan_id"]
+        _capture_state["scan_id"] = None
+        _capture_state["stop_event"] = None
+        _capture_state["status"] = "stopped"
     if _capture_state["thread"]:
         _capture_state["thread"].join(timeout=5)
         _capture_state["thread"] = None
@@ -220,4 +277,25 @@ def stop_capture_loop() -> Optional[int]:
 
 
 def get_current_scan_id() -> Optional[int]:
-    return _capture_state.get("scan_id")
+    with _capture_state_lock:
+        return _capture_state.get("scan_id")
+
+
+def get_capture_progress() -> dict:
+    with _capture_state_lock:
+        scan_id = _capture_state.get("scan_id")
+        captured_points = int(_capture_state.get("captured_points") or 0)
+        total_points = _capture_state.get("total_points")
+        status = _capture_state.get("status") or "idle"
+        last_capture_ready = _capture_state.get("last_capture_ready")
+    progress_percent = 0.0
+    if total_points and total_points > 0:
+        progress_percent = min(100.0, (captured_points / total_points) * 100.0)
+    return {
+        "scan_id": scan_id,
+        "captured_points": captured_points,
+        "total_points": total_points,
+        "progress_percent": progress_percent,
+        "status": status,
+        "last_capture_ready": bool(last_capture_ready),
+    }

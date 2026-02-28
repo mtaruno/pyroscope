@@ -24,6 +24,14 @@ from app.models.image import ScanImage, ImageType
 
 router = APIRouter(prefix="/scans", tags=["Scans"])
 
+def _as_float(value):
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
 
 @router.post("", response_model=ScanCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_scan(
@@ -66,7 +74,7 @@ async def get_scans(
             avg_air_temp=float(scan.avg_air_temp) if scan.avg_air_temp else None,
             avg_humidity=float(scan.avg_humidity) if scan.avg_humidity else None,
             avg_plant_temp=float(scan.avg_plant_temp) if scan.avg_plant_temp else None,  # ✅ 添加
-            fuel_load=float(scan.fuel_load) if scan.fuel_load else None                   # ✅ 添加
+            fuel_load=_as_float(scan.fuel_load)                                            # ✅ 添加
         )
         for scan in scans
     ]
@@ -110,9 +118,13 @@ async def get_scan_detail(scan_id: int, db: Session = Depends(get_db)):
         avg_humidity=float(scan.avg_humidity) if scan.avg_humidity else None,
         wind_speed=float(scan.wind_speed) if scan.wind_speed else None,
         temp_diff=float(scan.temp_diff) if scan.temp_diff else None,
-        fuel_load=scan.fuel_load,
+        fuel_load=_as_float(scan.fuel_load),
         fuel_density=float(scan.fuel_density) if scan.fuel_density else None,
         biomass=float(scan.biomass) if scan.biomass else None,
+        one_hour_fuel=_as_float(scan.one_hour_fuel),
+        ten_hour_fuel=_as_float(scan.ten_hour_fuel),
+        hundred_hour_fuel=_as_float(scan.hundred_hour_fuel),
+        pine_cone_count=scan.pine_cone_count,
         robot_id=scan.robot_id,
         completed_at=scan.completed_at,
         created_at=scan.created_at,
