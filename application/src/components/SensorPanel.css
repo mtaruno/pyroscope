@@ -10,9 +10,30 @@
   font-size: 1.1rem;
   font-weight: 600;
   color: #f1f5f9;
+  margin: 0;
+}
+
+.sensor-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin: 0 0 1rem 0;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.sensor-status {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.sensor-status.ok {
+  color: #4ade80;
+}
+
+.sensor-status.bad {
+  color: #f87171;
 }
 
 .sensor-error {

@@ -150,6 +150,10 @@ class ApiClient {
     return this.request('/sensors/latest');
   }
 
+  async getSensorsAvailability() {
+    return this.request('/sensors/availability');
+  }
+
   /** Live ROS snapshot for scan modal (temperature, humidity, thermal_mean, image URLs). */
   async getLiveSnapshot() {
     return this.request('/sensors/live-snapshot');

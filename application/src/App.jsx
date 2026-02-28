@@ -482,7 +482,7 @@ function App() {
           onScanTargetChange={handleScanTargetChange}
           onMarkerClick={handleMarkerClick}
         />
-        <SensorPanel />
+        <SensorPanel expanded={isScanning} />
         {isScanning && (
           <section className="latest-capture-panel" aria-label="Latest capture">
             <h3 className="latest-capture-title">Latest capture</h3>

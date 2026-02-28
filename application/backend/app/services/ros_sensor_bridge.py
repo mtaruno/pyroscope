@@ -14,6 +14,13 @@ import os
 import threading
 from typing import Optional, Dict, Any
 
+REQUIRED_SENSOR_TOPICS = [
+    "/sensors/sht40/temperature",
+    "/sensors/sht40/humidity",
+    "/sensors/thermal/mean",
+    "/camera/color/image_raw",
+]
+
 _ros_cache: Dict[str, Any] = {
     "temperature": None,
     "humidity": None,
@@ -174,3 +181,21 @@ def is_ros_configured() -> bool:
     from app.config import settings
     uri = (settings.ROS_MASTER_URI or os.environ.get("ROS_MASTER_URI") or "").strip()
     return bool(uri)
+
+
+def get_required_topics_status() -> Dict[str, Any]:
+    """Check whether required sensor topics currently exist on ROS master."""
+    status = {"available": False, "missing_topics": list(REQUIRED_SENSOR_TOPICS)}
+    if not is_ros_configured():
+        return status
+    try:
+        import rospy
+        published = rospy.get_published_topics()
+        published_names = {item[0] for item in published}
+        missing = [topic for topic in REQUIRED_SENSOR_TOPICS if topic not in published_names]
+        return {
+            "available": len(missing) == 0,
+            "missing_topics": missing,
+        }
+    except Exception:
+        return status

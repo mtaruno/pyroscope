@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from app.config import settings
-from app.services.ros_sensor_bridge import get_latest_from_ros
+from app.services.ros_sensor_bridge import get_latest_from_ros, get_required_topics_status
 
 router = APIRouter(prefix="/sensors", tags=["Sensors"])
 
@@ -32,6 +32,11 @@ class SensorData(BaseModel):
     timestamp: Optional[float] = None
 
 
+class SensorAvailability(BaseModel):
+    available: bool = False
+    missing_topics: list[str] = []
+
+
 @router.get("/latest", response_model=SensorData)
 async def get_latest_sensors():
     """Get latest sensor readings from all sensors"""
@@ -50,6 +55,13 @@ async def get_latest_sensors():
             status_code=500,
             detail=f"Failed to read sensor data: {str(e)}"
         )
+
+
+@router.get("/availability", response_model=SensorAvailability)
+async def get_sensor_availability():
+    """Check whether required sensor ROS topics are currently available."""
+    status = get_required_topics_status()
+    return SensorAvailability(**status)
 
 
 @router.get("/thermal/image")
