@@ -16,7 +16,7 @@ from std_msgs.msg import Bool, String
 
 # Margin inset from area boundary so waypoints never land on walls.
 # Must be >= robot half-width (0.125m) + inflation_radius (0.15m).
-WALL_MARGIN = 0.30  # meters
+WALL_MARGIN = 0.20  # meters
 
 
 class CoveragePlanner:
