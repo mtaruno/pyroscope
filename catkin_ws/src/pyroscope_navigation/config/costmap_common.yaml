@@ -20,8 +20,8 @@ obstacle_layer:
 
 # Inflation layer params
 inflation_layer:
-  inflation_radius: 0.18
-  cost_scaling_factor: 10.0
+  inflation_radius: 0.15
+  cost_scaling_factor: 3.0
 
 # Map resolution
 resolution: 0.05
