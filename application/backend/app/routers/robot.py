@@ -76,11 +76,18 @@ class MissionConfig(BaseModel):
     waypoint_timeout: float = 30.0
 
 
-def _calc_total_points(area_size_m: float, precision_m: float) -> int:
-    if precision_m <= 0:
-        return 0
-    points_per_side = int(round(area_size_m / precision_m)) + 1
-    return max(0, points_per_side * points_per_side)
+def _calc_total_waypoints(area_width: float, area_height: float,
+                          row_spacing: float, waypoint_spacing: float,
+                          wall_margin: float = 0.20) -> int:
+    """Match the coverage_planner.py waypoint generation logic exactly."""
+    import math
+    ew = area_width - 2 * wall_margin
+    eh = area_height - 2 * wall_margin
+    if ew <= 0 or eh <= 0:
+        return 1  # center-point-only fallback
+    num_rows = max(1, int(math.ceil(eh / row_spacing)) + 1)
+    num_cols = max(1, int(math.ceil(ew / waypoint_spacing)) + 1)
+    return num_rows * num_cols
 
 
 @router.post("/mission/start")
@@ -97,10 +104,12 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
     try:
         config = config or MissionConfig()
         area_size_m = float(config.area_size_m)
-        precision_m = float(config.sampling_precision_m)
-        total_points = _calc_total_points(area_size_m, precision_m)
         area_width = float(config.area_width) if config.area_width is not None else area_size_m
         area_height = float(config.area_height) if config.area_height is not None else area_size_m
+        total_points = _calc_total_waypoints(
+            area_width, area_height,
+            config.row_spacing, config.waypoint_spacing,
+        )
 
         # Create scan record (in progress) so we have scan_id for waypoint samples
         scan = ScanRecord(

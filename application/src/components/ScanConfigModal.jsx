@@ -7,9 +7,15 @@ const SCAN_SECONDS_PER_SQUARE_METER = 5
 const SCAN_SECONDS_PER_POINT = 8
 const FUEL_ESTIMATE_SECONDS_PER_POINT = 60
 
-function calcTotalPoints(areaSize, precision) {
-  const pointsPerSide = Math.round(areaSize / precision) + 1
-  return pointsPerSide * pointsPerSide
+const WALL_MARGIN = 0.20
+
+function calcTotalPoints(areaSize, precision, rowSpacing) {
+  const ew = areaSize - 2 * WALL_MARGIN
+  const eh = areaSize - 2 * WALL_MARGIN
+  if (ew <= 0 || eh <= 0) return 1
+  const numRows = Math.max(1, Math.ceil(eh / rowSpacing) + 1)
+  const numCols = Math.max(1, Math.ceil(ew / precision) + 1)
+  return numRows * numCols
 }
 
 function formatDuration(totalSeconds) {
@@ -31,8 +37,8 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
   const [waypointTimeout, setWaypointTimeout] = useState(30.0)
 
   const totalPoints = useMemo(
-    () => calcTotalPoints(areaSize, precision),
-    [areaSize, precision]
+    () => calcTotalPoints(areaSize, precision, rowSpacing),
+    [areaSize, precision, rowSpacing]
   )
   const areaSquareMeters = areaSize * areaSize
   const scanEstimateSeconds =
