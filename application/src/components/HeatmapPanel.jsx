@@ -5,6 +5,7 @@ import 'leaflet/dist/leaflet.css'
 import { Layers, Thermometer, Droplets, Flame, AlertTriangle } from 'lucide-react'
 import './HeatmapPanel.css'
 import SimpleHeatmap from './SimpleHeatmap'
+import apiClient from '../services/api'
 
 // Boundary layer component (50m and 200m boundaries)
 function BoundaryLayer({ dataPoints }) {
@@ -149,15 +150,11 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
             setError(null)
 
             try {
-                const response = await fetch(`http://localhost:8000/api/scans/${scanId}/heatmap-data`)
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`)
-                }
-                const data = await response.json()
+                const data = await apiClient.getHeatmapData(scanId)
                 setHeatmapData(data)
             } catch (err) {
                 console.error('Failed to load heatmap data:', err)
-                setError(err.message)
+                setError(err.message || 'Failed to fetch')
             } finally {
                 setIsLoading(false)
             }
