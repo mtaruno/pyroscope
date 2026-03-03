@@ -14,6 +14,11 @@ from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from std_msgs.msg import Bool, String
 
 
+# Margin inset from area boundary so waypoints never land on walls.
+# Must be >= robot half-width (0.125m) + inflation_radius (0.15m).
+WALL_MARGIN = 0.30  # meters
+
+
 class CoveragePlanner:
     def __init__(self):
         rospy.init_node('coverage_planner', anonymous=False)
@@ -29,6 +34,9 @@ class CoveragePlanner:
         # Timing parameters
         self.dwell_time = rospy.get_param('~dwell_time', 3.0)
         self.waypoint_timeout = rospy.get_param('~waypoint_timeout', 60.0)
+
+        # Max consecutive failures before aborting mission
+        self.max_consecutive_failures = 3
 
         # State
         self.waypoints = []
@@ -54,42 +62,58 @@ class CoveragePlanner:
         self.validate_waypoint_distances()
 
         rospy.loginfo("Coverage Planner initialized")
-        rospy.loginfo("  Area: %.1f x %.1f m", self.area_width, self.area_height)
-        rospy.loginfo("  Row spacing: %.1f m, Waypoint spacing: %.1f m", self.row_spacing, self.waypoint_spacing)
+        rospy.loginfo("  Area: %.1f x %.1f m (margin: %.2fm from walls)",
+                      self.area_width, self.area_height, WALL_MARGIN)
+        rospy.loginfo("  Row spacing: %.1f m, Waypoint spacing: %.1f m",
+                      self.row_spacing, self.waypoint_spacing)
         rospy.loginfo("  Origin: (%.1f, %.1f)", self.origin_x, self.origin_y)
         rospy.loginfo("  Total waypoints: %d", len(self.waypoints))
         rospy.loginfo("  Dwell time: %.1f s", self.dwell_time)
 
     def generate_waypoints(self):
-        """Generate boustrophedon (lawnmower) waypoints"""
+        """Generate boustrophedon (lawnmower) waypoints with wall margin inset."""
         self.waypoints = []
 
-        num_rows = int(math.ceil(self.area_height / self.row_spacing)) + 1
-        num_cols = int(math.ceil(self.area_width / self.waypoint_spacing)) + 1
+        # Inset the scannable area so waypoints never touch walls
+        min_x = self.origin_x + WALL_MARGIN
+        max_x = self.origin_x + self.area_width - WALL_MARGIN
+        min_y = self.origin_y + WALL_MARGIN
+        max_y = self.origin_y + self.area_height - WALL_MARGIN
+
+        # If the area is too small for any margin, just use the center
+        if max_x <= min_x or max_y <= min_y:
+            cx = self.origin_x + self.area_width / 2.0
+            cy = self.origin_y + self.area_height / 2.0
+            self.waypoints.append((cx, cy))
+            rospy.logwarn("Area too small for margin -- using center point only (%.2f, %.2f)", cx, cy)
+            return
+
+        effective_width = max_x - min_x
+        effective_height = max_y - min_y
+
+        num_rows = max(1, int(math.ceil(effective_height / self.row_spacing)) + 1)
+        num_cols = max(1, int(math.ceil(effective_width / self.waypoint_spacing)) + 1)
 
         for row in range(num_rows):
-            y = self.origin_y + row * self.row_spacing
-            # Cap at area boundary
-            if y > self.origin_y + self.area_height:
-                y = self.origin_y + self.area_height
+            y = min_y + row * self.row_spacing
+            if y > max_y:
+                y = max_y
 
             # Alternate direction for lawnmower pattern
             if row % 2 == 0:
-                # Left to right
                 col_range = range(num_cols)
             else:
-                # Right to left
                 col_range = range(num_cols - 1, -1, -1)
 
             for col in col_range:
-                x = self.origin_x + col * self.waypoint_spacing
-                # Cap at area boundary
-                if x > self.origin_x + self.area_width:
-                    x = self.origin_x + self.area_width
+                x = min_x + col * self.waypoint_spacing
+                if x > max_x:
+                    x = max_x
 
                 self.waypoints.append((x, y))
 
-        rospy.loginfo("Generated %d waypoints in %d rows", len(self.waypoints), num_rows)
+        rospy.loginfo("Generated %d waypoints in %d rows (inset %.2fm from walls)",
+                      len(self.waypoints), num_rows, WALL_MARGIN)
 
     def validate_waypoint_distances(self):
         """Warn if consecutive waypoints exceed global costmap range"""
@@ -130,6 +154,17 @@ class CoveragePlanner:
             rospy.logwarn("move_base failed for (%.2f, %.2f) -- state %d", x, y, state)
             return False
 
+    def clear_costmaps(self):
+        """Ask move_base to clear costmaps -- helps recover from stuck states."""
+        try:
+            from std_srvs.srv import Empty
+            rospy.wait_for_service('/move_base/clear_costmaps', timeout=2.0)
+            clear = rospy.ServiceProxy('/move_base/clear_costmaps', Empty)
+            clear()
+            rospy.loginfo("Costmaps cleared")
+        except Exception:
+            rospy.logwarn("Could not clear costmaps")
+
     def publish_progress(self):
         """Publish current progress"""
         total = len(self.waypoints)
@@ -140,10 +175,13 @@ class CoveragePlanner:
         self.progress_pub.publish(String(data=msg))
 
     def run(self):
-        # Wait for subscribers to connect
-        rospy.sleep(2.0)
+        # Wait for subscribers to connect and costmap to populate
+        rospy.loginfo("Waiting 5s for costmap to populate from lidar...")
+        rospy.sleep(5.0)
 
         rospy.loginfo("Starting coverage mission!")
+
+        consecutive_failures = 0
 
         while self.current_index < len(self.waypoints) and not rospy.is_shutdown():
             x, y = self.waypoints[self.current_index]
@@ -154,15 +192,28 @@ class CoveragePlanner:
 
             success = self.send_move_base_goal(x, y)
             if success:
-                rospy.loginfo("Reached waypoint %d/%d", self.current_index + 1, len(self.waypoints))
-            else:
-                rospy.logwarn("Skipping waypoint %d/%d", self.current_index + 1, len(self.waypoints))
+                rospy.loginfo("Reached waypoint %d/%d",
+                              self.current_index + 1, len(self.waypoints))
+                consecutive_failures = 0
 
-            # Dwell at waypoint for thermal capture
-            rospy.loginfo("Dwelling for %.1f s (thermal capture)", self.dwell_time)
-            self.capture_ready_pub.publish(Bool(data=True))
-            rospy.sleep(self.dwell_time)
-            self.capture_ready_pub.publish(Bool(data=False))
+                # Only capture data at successfully reached waypoints
+                rospy.loginfo("Dwelling for %.1f s (thermal capture)", self.dwell_time)
+                self.capture_ready_pub.publish(Bool(data=True))
+                rospy.sleep(self.dwell_time)
+                self.capture_ready_pub.publish(Bool(data=False))
+            else:
+                consecutive_failures += 1
+                rospy.logwarn("Failed waypoint %d/%d (%d consecutive failures)",
+                              self.current_index + 1, len(self.waypoints),
+                              consecutive_failures)
+
+                if consecutive_failures >= self.max_consecutive_failures:
+                    rospy.logwarn("Too many consecutive failures -- clearing costmaps and retrying")
+                    self.clear_costmaps()
+                    rospy.sleep(2.0)
+                    consecutive_failures = 0
+                    # Don't increment -- retry this waypoint after clearing
+                    continue
 
             self.current_index += 1
 
