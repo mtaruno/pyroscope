@@ -208,12 +208,10 @@ class CoveragePlanner:
                               consecutive_failures)
 
                 if consecutive_failures >= self.max_consecutive_failures:
-                    rospy.logwarn("Too many consecutive failures -- clearing costmaps and retrying")
+                    rospy.logwarn("Too many consecutive failures -- clearing costmaps and skipping waypoint")
                     self.clear_costmaps()
                     rospy.sleep(2.0)
                     consecutive_failures = 0
-                    # Don't increment -- retry this waypoint after clearing
-                    continue
 
             self.current_index += 1
 
