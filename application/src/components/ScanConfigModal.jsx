@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import './ScanConfigModal.css'
 
-const AREA_OPTIONS = [3, 25, 50]
-const PRECISION_OPTIONS = [1, 5]
+const AREA_OPTIONS = [1, 2, 3]
+const PRECISION_OPTIONS = [0.25, 0.5, 1]
 const SCAN_SECONDS_PER_SQUARE_METER = 5
 const SCAN_SECONDS_PER_POINT = 8
 const FUEL_ESTIMATE_SECONDS_PER_POINT = 60
@@ -22,8 +22,13 @@ function formatDuration(totalSeconds) {
 }
 
 function ScanConfigModal({ open, onCancel, onConfirm }) {
-  const [areaSize, setAreaSize] = useState(50)
-  const [precision, setPrecision] = useState(5)
+  const [areaSize, setAreaSize] = useState(3)
+  const [precision, setPrecision] = useState(0.5)
+  const [originX, setOriginX] = useState(0)
+  const [originY, setOriginY] = useState(0)
+  const [rowSpacing, setRowSpacing] = useState(0.8)
+  const [dwellTime, setDwellTime] = useState(2.0)
+  const [waypointTimeout, setWaypointTimeout] = useState(30.0)
 
   const totalPoints = useMemo(
     () => calcTotalPoints(areaSize, precision),
@@ -43,7 +48,7 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
         <h3 className="scan-config-title">Start Scan Configuration</h3>
 
         <div className="scan-config-group">
-          <p className="scan-config-label">Area Size</p>
+          <p className="scan-config-label">Area Size (meters)</p>
           <div className="scan-config-options">
             {AREA_OPTIONS.map((value) => (
               <button
@@ -74,6 +79,71 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
           </div>
         </div>
 
+        <div className="scan-config-group">
+          <p className="scan-config-label">Origin (robot start position in meters)</p>
+          <div className="scan-config-inputs">
+            <label className="scan-config-input-label">
+              X
+              <input
+                type="number"
+                step="0.1"
+                value={originX}
+                onChange={(e) => setOriginX(parseFloat(e.target.value) || 0)}
+                className="scan-config-input"
+              />
+            </label>
+            <label className="scan-config-input-label">
+              Y
+              <input
+                type="number"
+                step="0.1"
+                value={originY}
+                onChange={(e) => setOriginY(parseFloat(e.target.value) || 0)}
+                className="scan-config-input"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="scan-config-group">
+          <p className="scan-config-label">Advanced</p>
+          <div className="scan-config-inputs">
+            <label className="scan-config-input-label">
+              Row spacing (m)
+              <input
+                type="number"
+                step="0.1"
+                min="0.1"
+                value={rowSpacing}
+                onChange={(e) => setRowSpacing(parseFloat(e.target.value) || 0.8)}
+                className="scan-config-input"
+              />
+            </label>
+            <label className="scan-config-input-label">
+              Dwell time (s)
+              <input
+                type="number"
+                step="0.5"
+                min="0"
+                value={dwellTime}
+                onChange={(e) => setDwellTime(parseFloat(e.target.value) || 2.0)}
+                className="scan-config-input"
+              />
+            </label>
+            <label className="scan-config-input-label">
+              Waypoint timeout (s)
+              <input
+                type="number"
+                step="1"
+                min="5"
+                value={waypointTimeout}
+                onChange={(e) => setWaypointTimeout(parseFloat(e.target.value) || 30.0)}
+                className="scan-config-input"
+              />
+            </label>
+          </div>
+        </div>
+
         <div className="scan-config-summary">
           <p>Points per side: <strong>{Math.round(areaSize / precision) + 1}</strong></p>
           <p>Total points: <strong>{totalPoints}</strong></p>
@@ -86,7 +156,16 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
           <button
             type="button"
             className="scan-config-btn confirm"
-            onClick={() => onConfirm({ areaSize, precision, totalPoints })}
+            onClick={() => onConfirm({
+              areaSize,
+              precision,
+              totalPoints,
+              originX,
+              originY,
+              rowSpacing,
+              dwellTime,
+              waypointTimeout,
+            })}
           >
             Start Scan
           </button>

@@ -184,10 +184,22 @@ async def stop_coverage_mission(db: Session = Depends(get_db)):
 
     if mission_process is not None and mission_process.poll() is None:
         try:
-            os.killpg(os.getpgid(mission_process.pid), signal.SIGTERM)
+            pgid = os.getpgid(mission_process.pid)
+            # Only kill the child process group, never our own
+            if pgid != os.getpgrp():
+                os.killpg(pgid, signal.SIGTERM)
+            else:
+                mission_process.terminate()
             mission_process.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            os.killpg(os.getpgid(mission_process.pid), signal.SIGKILL)
+            try:
+                pgid = os.getpgid(mission_process.pid)
+                if pgid != os.getpgrp():
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    mission_process.kill()
+            except Exception:
+                pass
         except Exception:
             pass
         mission_process = None  # noqa: PLW0602

@@ -272,7 +272,10 @@ function App() {
     setShowScanConfigModal(true)
   }
 
-  const handleConfirmStartScan = async ({ areaSize, precision, totalPoints: configuredTotal }) => {
+  const handleConfirmStartScan = async ({
+    areaSize, precision, totalPoints: configuredTotal,
+    originX = 0, originY = 0, rowSpacing = 0.8, dwellTime = 2.0, waypointTimeout = 30.0
+  }) => {
     setShowScanConfigModal(false)
     try {
       const missionConfig = {
@@ -280,12 +283,12 @@ function App() {
         sampling_precision_m: precision,
         area_width: areaSize,
         area_height: areaSize,
-        row_spacing: precision,
+        row_spacing: rowSpacing,
         waypoint_spacing: precision,
-        origin_x: 0.0,
-        origin_y: 0.0,
-        dwell_time: 2.0,
-        waypoint_timeout: 30.0
+        origin_x: originX,
+        origin_y: originY,
+        dwell_time: dwellTime,
+        waypoint_timeout: waypointTimeout
       }
       const response = await apiClient.startCoverageMission(missionConfig)
       const scanId = response?.scan_id ?? null
