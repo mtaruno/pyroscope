@@ -211,15 +211,20 @@ async def get_heatmap_data(scan_id: int, db: Session = Depends(get_db)):
             detail="Scan not found"
         )
     
-    # Get all environmental data points for this scan
+    # Get environmental data points (from manual upload / legacy flow)
     env_data = db.query(EnvironmentalData).filter(
         EnvironmentalData.scan_id == scan_id
     ).all()
-    
-    # Calculate fire risk for each point
+
+    # Also get waypoint samples (from real robot capture)
+    waypoint_data = db.query(ScanWaypointSample).filter(
+        ScanWaypointSample.scan_id == scan_id
+    ).all()
+
     heatmap_points = []
+
+    # Add environmental data points
     for point in env_data:
-        # Calculate fire risk using the service
         fire_risk = FireRiskService.calculate_fire_risk(
             plant_temperature=float(point.plant_temperature) if point.plant_temperature else None,
             air_humidity=float(point.air_humidity) if point.air_humidity else None,
@@ -227,8 +232,7 @@ async def get_heatmap_data(scan_id: int, db: Session = Depends(get_db)):
             ten_hour_fuel=float(point.ten_hour_fuel) if point.ten_hour_fuel else None,
             hundred_hour_fuel=float(point.hundred_hour_fuel) if point.hundred_hour_fuel else None
         )
-        
-        heatmap_point = HeatmapPoint(
+        heatmap_points.append(HeatmapPoint(
             latitude=float(point.latitude) if point.latitude else 0,
             longitude=float(point.longitude) if point.longitude else 0,
             air_temperature=float(point.air_temperature) if point.air_temperature else None,
@@ -238,9 +242,45 @@ async def get_heatmap_data(scan_id: int, db: Session = Depends(get_db)):
             ten_hour_fuel=float(point.ten_hour_fuel) if point.ten_hour_fuel else None,
             hundred_hour_fuel=float(point.hundred_hour_fuel) if point.hundred_hour_fuel else None,
             fire_risk=fire_risk
-        )
-        heatmap_points.append(heatmap_point)
-    
+        ))
+
+    # Add waypoint sample data (from real robot captures)
+    if waypoint_data and not env_data:
+        # Use scan's lat/lng as base, spread waypoints in a grid for visualization
+        base_lat = float(scan.latitude) if scan.latitude else 0
+        base_lng = float(scan.longitude) if scan.longitude else 0
+        scan_area = scan.scan_area or ""
+        # Parse area size (e.g. "3 m x 3 m" -> 3)
+        import re
+        area_match = re.search(r'([\d.]+)', scan_area)
+        area_m = float(area_match.group(1)) if area_match else 3.0
+        deg_per_m = 1.0 / 111000.0
+        half_span = (area_m / 2.0) * deg_per_m
+
+        n = len(waypoint_data)
+        cols = max(1, int(n ** 0.5))
+        for i, wp in enumerate(waypoint_data):
+            row = i // cols
+            col = i % cols
+            lat = base_lat - half_span + (row / max(1, cols - 1)) * 2 * half_span if cols > 1 else base_lat
+            lng = base_lng - half_span + (col / max(1, cols - 1)) * 2 * half_span if cols > 1 else base_lng
+
+            fire_risk = FireRiskService.calculate_fire_risk(
+                plant_temperature=float(wp.thermal_mean) if wp.thermal_mean else None,
+                air_humidity=float(wp.air_humidity) if wp.air_humidity else None,
+            )
+            heatmap_points.append(HeatmapPoint(
+                latitude=lat,
+                longitude=lng,
+                air_temperature=float(wp.air_temperature) if wp.air_temperature else None,
+                air_humidity=float(wp.air_humidity) if wp.air_humidity else None,
+                plant_temperature=float(wp.thermal_mean) if wp.thermal_mean else None,
+                one_hour_fuel=None,
+                ten_hour_fuel=None,
+                hundred_hour_fuel=None,
+                fire_risk=fire_risk
+            ))
+
     return HeatmapDataResponse(
         scan_id=scan_id,
         total_points=len(heatmap_points),

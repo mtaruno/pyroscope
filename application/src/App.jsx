@@ -53,8 +53,6 @@ function App() {
   const [showScanConfigModal, setShowScanConfigModal] = useState(false)
   const [capturedPoints, setCapturedPoints] = useState(0)
   const [totalPoints, setTotalPoints] = useState(0)
-  const [showFuelUploadPrompt, setShowFuelUploadPrompt] = useState(false)
-  const [isFuelUploading, setIsFuelUploading] = useState(false)
   const finishHandledRef = useRef(false)
 
   // Load scans from API on component mount
@@ -195,7 +193,10 @@ function App() {
           setIsScanning(false)
           setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
           setScanPhase('Scan complete')
-          setShowFuelUploadPrompt(true)
+          // Go straight to scan results
+          await loadAndShowScanResult(activeScanId)
+          setActiveScanId(null)
+          setLatestCapture(null)
         }
       } catch (error) {
         console.error('Mission progress poll failed:', error)
@@ -304,7 +305,6 @@ function App() {
       setTotalPoints(response?.total_points || configuredTotal || 0)
       setScanProgress(response?.progress_percent || 0)
       setScanPhase('Waiting for /coverage/capture_ready = true ...')
-      setShowFuelUploadPrompt(false)
       setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
     } catch (error) {
       console.error('Failed to start coverage mission:', error)
@@ -342,23 +342,6 @@ function App() {
       await loadAndShowScanResult(activeScanId)
       setActiveScanId(null)
       setLatestCapture(null)
-    }
-  }
-
-  const handleFuelUploadConfirm = async () => {
-    if (!activeScanId) return
-    try {
-      setIsFuelUploading(true)
-      await apiClient.estimateFuelForScan(activeScanId)
-      await loadAndShowScanResult(activeScanId)
-      setShowFuelUploadPrompt(false)
-      setActiveScanId(null)
-      setLatestCapture(null)
-    } catch (error) {
-      console.error('Fuel estimation failed:', error)
-      alert(`Fuel estimation failed: ${error.message}`)
-    } finally {
-      setIsFuelUploading(false)
     }
   }
 
@@ -518,37 +501,6 @@ function App() {
         onCancel={() => setShowScanConfigModal(false)}
         onConfirm={handleConfirmStartScan}
       />
-      {showFuelUploadPrompt && (
-        <div className="scan-modal-overlay" role="dialog" aria-label="Fuel estimation upload prompt">
-          <div className="scan-modal-content">
-            <h3 className="latest-capture-title">Scan finished</h3>
-            <p>Start automatic image upload to AI2 API for fuel load estimation?</p>
-            <div className="scan-prompt-actions">
-              <button
-                type="button"
-                className="scan-prompt-btn scan-prompt-cancel"
-                onClick={() => {
-                  setShowFuelUploadPrompt(false)
-                  loadAndShowScanResult(activeScanId)
-                  setActiveScanId(null)
-                  setLatestCapture(null)
-                }}
-                disabled={isFuelUploading}
-              >
-                Skip
-              </button>
-              <button
-                type="button"
-                className="scan-prompt-btn scan-prompt-confirm"
-                onClick={handleFuelUploadConfirm}
-                disabled={isFuelUploading}
-              >
-                {isFuelUploading ? 'Uploading...' : 'Upload to AI2'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
