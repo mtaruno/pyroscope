@@ -37,6 +37,7 @@ app.include_router(sensors.router, prefix="/api")
 @app.on_event("startup")
 def startup_ros_bridge():
     """Auto-start ROS sensor bridge if ROS_MASTER_URI is configured."""
+    print(f"[STARTUP] ROS_MASTER_URI={settings.ROS_MASTER_URI!r}, ROS_IP={settings.ROS_IP!r}")
     if is_ros_configured():
         upload_dir = settings.UPLOAD_DIR
         thermal_dir = os.path.join(upload_dir, "thermal_latest")
@@ -44,7 +45,9 @@ def startup_ros_bridge():
         os.makedirs(thermal_dir, exist_ok=True)
         os.makedirs(rgb_dir, exist_ok=True)
         started = start_ros_bridge(thermal_dir, rgb_dir)
-        logger.info("ROS sensor bridge %s on startup", "started" if started else "failed to start")
+        print(f"[STARTUP] ROS sensor bridge {'STARTED' if started else 'FAILED TO START'}")
+    else:
+        print("[STARTUP] ROS not configured — sensor bridge NOT started")
 
 
 @app.get("/")
