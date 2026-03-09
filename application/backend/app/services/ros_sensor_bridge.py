@@ -57,11 +57,23 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         logging.getLogger(__name__).warning("rospy not available, ROS sensor bridge disabled: %s", e)
         return
 
+    # Image conversion: prefer cv_bridge, fall back to numpy+Pillow
+    _use_cv_bridge = False
     try:
         from cv_bridge import CvBridge
-        bridge = CvBridge()
+        import cv2 as _cv2
+        _bridge = CvBridge()
+        _use_cv_bridge = True
     except ImportError:
-        bridge = None
+        _bridge = None
+        _cv2 = None
+    try:
+        import numpy as np
+        from PIL import Image as PILImage
+        _use_pil = True
+    except ImportError:
+        _use_pil = False
+    can_save_images = _use_cv_bridge or _use_pil
     try:
         from transbot_msgs.msg import Battery as TransbotBattery
     except ImportError:
@@ -79,35 +91,41 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         with _ros_cache["lock"]:
             _ros_cache["thermal_mean"] = msg.data
 
-    def cb_thermal_image(msg):
-        if not bridge:
-            return
+    def _save_ros_image(msg, save_path, encoding="passthrough"):
+        """Convert sensor_msgs/Image to JPEG. Uses cv_bridge if available, else numpy+Pillow."""
         try:
-            import cv2
-            cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
-            if cv_img is not None:
-                path = os.path.join(thermal_image_save_dir, "ros_latest.jpg")
-                cv2.imwrite(path, cv_img)
-                with _ros_cache["lock"]:
-                    _ros_cache["thermal_image_path"] = path
-        except Exception:
-            pass
+            if _use_cv_bridge:
+                cv_img = _bridge.imgmsg_to_cv2(msg, desired_encoding=encoding)
+                if cv_img is not None:
+                    _cv2.imwrite(save_path, cv_img)
+                    return True
+            elif _use_pil:
+                # Parse raw ROS Image data with numpy + Pillow
+                channels = len(msg.data) // (msg.width * msg.height) if msg.width and msg.height else 3
+                arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, channels))
+                # ROS typically publishes BGR8; Pillow expects RGB
+                if msg.encoding in ("bgr8", "8UC3") or (encoding == "bgr8" and channels == 3):
+                    arr = arr[:, :, ::-1]  # BGR → RGB
+                pil_img = PILImage.fromarray(arr)
+                pil_img.save(save_path, "JPEG", quality=85)
+                return True
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug("Image save failed: %s", e)
+        return False
+
+    def cb_thermal_image(msg):
+        path = os.path.join(thermal_image_save_dir, "ros_latest.jpg")
+        if _save_ros_image(msg, path):
+            with _ros_cache["lock"]:
+                _ros_cache["thermal_image_path"] = path
 
     def cb_rgb_image(msg):
         """Cache latest RealSense D435i color frame as JPEG."""
-        if not bridge:
-            return
-        try:
-            import cv2
-            # RealSense publishes BGR8; convert directly to JPEG
-            cv_img = bridge.imgmsg_to_cv2(msg, desired_encoding="bgr8")
-            if cv_img is not None:
-                path = os.path.join(rgb_image_save_dir, "ros_latest.jpg")
-                cv2.imwrite(path, cv_img)
-                with _ros_cache["lock"]:
-                    _ros_cache["rgb_image_path"] = path
-        except Exception:
-            pass
+        path = os.path.join(rgb_image_save_dir, "ros_latest.jpg")
+        if _save_ros_image(msg, path, encoding="bgr8"):
+            with _ros_cache["lock"]:
+                _ros_cache["rgb_image_path"] = path
 
     def cb_capture_ready(msg):
         # Consume only True events; each True means "capture once".
@@ -156,7 +174,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         rospy.Subscriber("/voltage", Float32, cb_voltage_float, queue_size=1)
     else:
         rospy.Subscriber("/voltage", Float64, cb_voltage_float, queue_size=1)
-    if bridge:
+    if can_save_images:
         rospy.Subscriber("/sensors/thermal/image", Image, cb_thermal_image, queue_size=1)
         rospy.Subscriber("/camera/color/image_raw", Image, cb_rgb_image, queue_size=1)
 

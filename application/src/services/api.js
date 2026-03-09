@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://10.18.50.245:8000/api';
+const API_BASE_URL = 'http://10.0.0.46:8000/api';
 
 class ApiClient {
   async request(endpoint, options = {}) {
@@ -147,7 +147,7 @@ class ApiClient {
 
   // Real-time Sensors
   async getLatestSensors() {
-    return this.request('/sensors/latest');
+    return this.request('/sensors/live-snapshot');
   }
 
   async getSensorsAvailability() {
@@ -160,11 +160,11 @@ class ApiClient {
   }
 
   getThermalImageUrl() {
-    return `${API_BASE_URL}/sensors/thermal/image?t=${Date.now()}`;
+    return `${API_BASE_URL}/sensors/live/thermal?t=${Date.now()}`;
   }
 
   getRgbImageUrl() {
-    return `${API_BASE_URL}/sensors/rgb/image?t=${Date.now()}`;
+    return `${API_BASE_URL}/sensors/live/rgb?t=${Date.now()}`;
   }
 }
 

@@ -1,7 +1,12 @@
+import os
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import scans, environmental, images, robot, sensors
+from app.services.ros_sensor_bridge import is_ros_configured, start_ros_bridge
+
+logger = logging.getLogger(__name__)
 
 # Create FastAPI app
 app = FastAPI(
@@ -27,6 +32,19 @@ app.include_router(environmental.router, prefix="/api")
 app.include_router(images.router, prefix="/api")
 app.include_router(robot.router, prefix="/api")
 app.include_router(sensors.router, prefix="/api")
+
+
+@app.on_event("startup")
+def startup_ros_bridge():
+    """Auto-start ROS sensor bridge if ROS_MASTER_URI is configured."""
+    if is_ros_configured():
+        upload_dir = settings.UPLOAD_DIR
+        thermal_dir = os.path.join(upload_dir, "thermal_latest")
+        rgb_dir = os.path.join(upload_dir, "realsense_latest")
+        os.makedirs(thermal_dir, exist_ok=True)
+        os.makedirs(rgb_dir, exist_ok=True)
+        started = start_ros_bridge(thermal_dir, rgb_dir)
+        logger.info("ROS sensor bridge %s on startup", "started" if started else "failed to start")
 
 
 @app.get("/")

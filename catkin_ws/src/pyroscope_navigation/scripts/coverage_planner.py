@@ -74,11 +74,11 @@ class CoveragePlanner:
         """Generate boustrophedon (lawnmower) waypoints with wall margin inset."""
         self.waypoints = []
 
-        # Inset the scannable area so waypoints never touch walls
-        min_x = self.origin_x + WALL_MARGIN
-        max_x = self.origin_x + self.area_width - WALL_MARGIN
-        min_y = self.origin_y + WALL_MARGIN
-        max_y = self.origin_y + self.area_height - WALL_MARGIN
+        # Center the grid on the origin, then inset by wall margin
+        min_x = self.origin_x - self.area_width / 2.0 + WALL_MARGIN
+        max_x = self.origin_x + self.area_width / 2.0 - WALL_MARGIN
+        min_y = self.origin_y - self.area_height / 2.0 + WALL_MARGIN
+        max_y = self.origin_y + self.area_height / 2.0 - WALL_MARGIN
 
         # If the area is too small for any margin, just use the center
         if max_x <= min_x or max_y <= min_y:

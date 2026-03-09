@@ -249,11 +249,7 @@ async def get_heatmap_data(scan_id: int, db: Session = Depends(get_db)):
         # Use scan's lat/lng as base, spread waypoints in a grid for visualization
         base_lat = float(scan.latitude) if scan.latitude else 0
         base_lng = float(scan.longitude) if scan.longitude else 0
-        scan_area = scan.scan_area or ""
-        # Parse area size (e.g. "3 m x 3 m" -> 3)
-        import re
-        area_match = re.search(r'([\d.]+)', scan_area)
-        area_m = float(area_match.group(1)) if area_match else 3.0
+        area_m = 50.0  # Match 50m inner boundary shown on heatmap map
         deg_per_m = 1.0 / 111000.0
         half_span = (area_m / 2.0) * deg_per_m
 
