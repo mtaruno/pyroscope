@@ -23,6 +23,8 @@ from app.services.ros_sensor_bridge import (
     get_latest_from_ros,
     wait_for_next_capture_ready,
     clear_capture_ready_queue,
+    save_live_rgb_to_file,
+    save_live_thermal_to_file,
 )
 
 
@@ -144,23 +146,12 @@ def _capture_loop_impl(scan_id: int):
             sht40_data = {"temperature": ros_data.get("temperature"), "humidity": ros_data.get("humidity")}
             thermal_data = {"thermal_mean": ros_data.get("thermal_mean"), "image_path": None}
 
-            # Copy latest thermal frame
-            src_thermal = ros_data.get("thermal_image_path")
-            if src_thermal and os.path.exists(src_thermal):
-                try:
-                    shutil.copy2(src_thermal, thermal_image_path)
-                    thermal_data["image_path"] = thermal_image_path
-                except Exception:
-                    pass
+            # Save latest thermal frame from in-memory cache
+            if save_live_thermal_to_file(thermal_image_path):
+                thermal_data["image_path"] = thermal_image_path
 
-            # Copy latest RGB frame for this waypoint
-            src_rgb = ros_data.get("rgb_image_path")
-            if src_rgb and os.path.exists(src_rgb):
-                try:
-                    shutil.copy2(src_rgb, rgb_waypoint_path)
-                except Exception:
-                    rgb_waypoint_path = None
-            else:
+            # Save latest RGB frame from in-memory cache
+            if not save_live_rgb_to_file(rgb_waypoint_path):
                 rgb_waypoint_path = None
         else:
             sht40_data = _run_sht40_once()

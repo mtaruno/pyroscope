@@ -8,11 +8,18 @@ Subscribed topics:
   /camera/color/image_raw      (sensor_msgs/Image)  -- RealSense D435i RGB
   /coverage/capture_ready      (std_msgs/Bool)      -- True triggers one capture
 Run only when ROS_MASTER_URI is set; runs in a background thread.
+
+Live images are cached as in-memory JPEG bytes (no disk I/O).
+Waypoint capture service handles its own disk saves for scan records.
 """
 
+import io
 import os
+import logging
 import threading
 from typing import Optional, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 REQUIRED_SENSOR_TOPICS = [
     "/sensors/sht40/temperature",
@@ -25,8 +32,10 @@ _ros_cache: Dict[str, Any] = {
     "temperature": None,
     "humidity": None,
     "thermal_mean": None,
-    "thermal_image_path": None,
-    "rgb_image_path": None,
+    "thermal_image_bytes": None,   # in-memory JPEG bytes
+    "rgb_image_bytes": None,       # in-memory JPEG bytes
+    "thermal_image_path": None,    # kept for waypoint capture compatibility
+    "rgb_image_path": None,        # kept for waypoint capture compatibility
     "voltage": None,
     "battery_percent": None,
     "capture_ready_queue": [],
@@ -46,6 +55,44 @@ def voltage_to_percent(voltage: float) -> int:
     return max(0, min(100, int(round(percent))))
 
 
+def get_live_rgb_bytes() -> Optional[bytes]:
+    """Return latest RGB JPEG bytes from cache, or None."""
+    with _ros_cache["lock"]:
+        return _ros_cache["rgb_image_bytes"]
+
+
+def get_live_thermal_bytes() -> Optional[bytes]:
+    """Return latest thermal JPEG bytes from cache, or None."""
+    with _ros_cache["lock"]:
+        return _ros_cache["thermal_image_bytes"]
+
+
+def save_live_rgb_to_file(dest_path: str) -> bool:
+    """Write the current in-memory RGB JPEG to a file (for waypoint capture). Returns True on success."""
+    jpeg_bytes = get_live_rgb_bytes()
+    if jpeg_bytes is None:
+        return False
+    try:
+        with open(dest_path, "wb") as f:
+            f.write(jpeg_bytes)
+        return True
+    except Exception:
+        return False
+
+
+def save_live_thermal_to_file(dest_path: str) -> bool:
+    """Write the current in-memory thermal JPEG to a file (for waypoint capture). Returns True on success."""
+    jpeg_bytes = get_live_thermal_bytes()
+    if jpeg_bytes is None:
+        return False
+    try:
+        with open(dest_path, "wb") as f:
+            f.write(jpeg_bytes)
+        return True
+    except Exception:
+        return False
+
+
 def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str):
     """Run rospy node and subscribe to sensor topics; update _ros_cache."""
     try:
@@ -53,11 +100,10 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         from std_msgs.msg import Float64, Float32, Bool
         from sensor_msgs.msg import Image
     except ImportError as e:
-        import logging
-        logging.getLogger(__name__).warning("rospy not available, ROS sensor bridge disabled: %s", e)
+        logger.warning("rospy not available, ROS sensor bridge disabled: %s", e)
         return
 
-    # Image conversion: prefer cv_bridge, fall back to numpy+Pillow
+    # Image conversion: prefer cv_bridge+cv2, fall back to numpy+Pillow
     _use_cv_bridge = False
     try:
         from cv_bridge import CvBridge
@@ -72,8 +118,13 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         from PIL import Image as PILImage
         _use_pil = True
     except ImportError:
+        np = None
+        PILImage = None
         _use_pil = False
-    can_save_images = _use_cv_bridge or _use_pil
+
+    can_process_images = _use_cv_bridge or _use_pil
+    logger.warning("Image pipeline: cv_bridge=%s, pil=%s, can_process=%s", _use_cv_bridge, _use_pil, can_process_images)
+
     try:
         from transbot_msgs.msg import Battery as TransbotBattery
     except ImportError:
@@ -91,44 +142,49 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         with _ros_cache["lock"]:
             _ros_cache["thermal_mean"] = msg.data
 
-    def _save_ros_image(msg, save_path, encoding="passthrough"):
-        """Convert sensor_msgs/Image to JPEG. Uses cv_bridge if available, else numpy+Pillow."""
+    def _ros_image_to_jpeg(msg, encoding="passthrough"):
+        """Convert sensor_msgs/Image to JPEG bytes in memory."""
         try:
             if _use_cv_bridge:
                 cv_img = _bridge.imgmsg_to_cv2(msg, desired_encoding=encoding)
                 if cv_img is not None:
-                    _cv2.imwrite(save_path, cv_img)
-                    return True
+                    _, buf = _cv2.imencode(".jpg", cv_img, [_cv2.IMWRITE_JPEG_QUALITY, 85])
+                    return buf.tobytes()
             elif _use_pil:
-                # Parse raw ROS Image data with numpy + Pillow
                 channels = len(msg.data) // (msg.width * msg.height) if msg.width and msg.height else 3
                 arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, channels))
-                # ROS typically publishes BGR8; Pillow expects RGB
                 if msg.encoding in ("bgr8", "8UC3") or (encoding == "bgr8" and channels == 3):
-                    arr = arr[:, :, ::-1]  # BGR → RGB
+                    arr = arr[:, :, ::-1]  # BGR -> RGB
                 pil_img = PILImage.fromarray(arr)
-                pil_img.save(save_path, "JPEG", quality=85)
-                return True
+                buf = io.BytesIO()
+                pil_img.save(buf, "JPEG", quality=85)
+                return buf.getvalue()
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).debug("Image save failed: %s", e)
-        return False
+            logger.warning("Image encode failed (encoding=%s, %dx%d): %s", msg.encoding, msg.width, msg.height, e)
+        return None
+
+    _rgb_logged = [False]
+    _thermal_logged = [False]
 
     def cb_thermal_image(msg):
-        path = os.path.join(thermal_image_save_dir, "ros_latest.jpg")
-        if _save_ros_image(msg, path):
+        jpeg_bytes = _ros_image_to_jpeg(msg)
+        if jpeg_bytes:
             with _ros_cache["lock"]:
-                _ros_cache["thermal_image_path"] = path
+                _ros_cache["thermal_image_bytes"] = jpeg_bytes
+            if not _thermal_logged[0]:
+                logger.warning("Thermal image streaming: %d bytes", len(jpeg_bytes))
+                _thermal_logged[0] = True
 
     def cb_rgb_image(msg):
-        """Cache latest RealSense D435i color frame as JPEG."""
-        path = os.path.join(rgb_image_save_dir, "ros_latest.jpg")
-        if _save_ros_image(msg, path, encoding="bgr8"):
+        jpeg_bytes = _ros_image_to_jpeg(msg, encoding="bgr8")
+        if jpeg_bytes:
             with _ros_cache["lock"]:
-                _ros_cache["rgb_image_path"] = path
+                _ros_cache["rgb_image_bytes"] = jpeg_bytes
+            if not _rgb_logged[0]:
+                logger.warning("RGB image streaming: %d bytes (encoding=%s, %dx%d)", len(jpeg_bytes), msg.encoding, msg.width, msg.height)
+                _rgb_logged[0] = True
 
     def cb_capture_ready(msg):
-        # Consume only True events; each True means "capture once".
         if msg.data is not True:
             return
         with _ros_cache["capture_ready_condition"]:
@@ -174,9 +230,12 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         rospy.Subscriber("/voltage", Float32, cb_voltage_float, queue_size=1)
     else:
         rospy.Subscriber("/voltage", Float64, cb_voltage_float, queue_size=1)
-    if can_save_images:
+    if can_process_images:
         rospy.Subscriber("/sensors/thermal/image", Image, cb_thermal_image, queue_size=1)
         rospy.Subscriber("/camera/color/image_raw", Image, cb_rgb_image, queue_size=1)
+        logger.warning("Subscribed to image topics (in-memory JPEG streaming)")
+    else:
+        logger.warning("NO image library available (need numpy+Pillow or cv_bridge+cv2). Image topics NOT subscribed.")
 
     rate = rospy.Rate(2)
     while not _ros_stop.is_set() and not rospy.is_shutdown():

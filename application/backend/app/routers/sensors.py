@@ -1,22 +1,23 @@
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 from typing import Optional
 import json
 from pathlib import Path
 
 from app.config import settings
-from app.services.ros_sensor_bridge import get_latest_from_ros, get_required_topics_status
+from app.services.ros_sensor_bridge import (
+    get_latest_from_ros,
+    get_required_topics_status,
+    get_live_rgb_bytes,
+    get_live_thermal_bytes,
+    _ros_cache,
+    _ros_thread,
+)
 
 router = APIRouter(prefix="/sensors", tags=["Sensors"])
 
-# Live ROS snapshot: images written by ros_sensor_bridge under UPLOAD_DIR
-def _live_thermal_path():
-    return Path(settings.UPLOAD_DIR) / "thermal_latest" / "ros_latest.jpg"
-def _live_rgb_path():
-    return Path(settings.UPLOAD_DIR) / "realsense_latest" / "ros_latest.jpg"
-
-# Path where ROS sensor bridge saves data
+# Fallback paths for standalone script mode (no ROS)
 SENSOR_DATA_DIR = Path.home() / "Dev/pyroscope/application/backend/sensor_data"
 SENSOR_DATA_FILE = SENSOR_DATA_DIR / "latest_sensors.json"
 THERMAL_IMAGE_PATH = SENSOR_DATA_DIR / "thermal_latest.jpg"
@@ -42,14 +43,10 @@ async def get_latest_sensors():
     """Get latest sensor readings from all sensors"""
     try:
         if not SENSOR_DATA_FILE.exists():
-            # Return empty data if sensor bridge not running yet
             return SensorData()
-
         with open(SENSOR_DATA_FILE, 'r') as f:
             data = json.load(f)
-
         return SensorData(**data)
-
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -66,44 +63,26 @@ async def get_sensor_availability():
 
 @router.get("/thermal/image")
 async def get_thermal_image():
-    """Get latest thermal camera image"""
+    """Get latest thermal camera image (fallback file-based)"""
     if not THERMAL_IMAGE_PATH.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="Thermal image not available"
-        )
-
-    return FileResponse(
-        THERMAL_IMAGE_PATH,
-        media_type="image/jpeg",
-        headers={"Cache-Control": "no-cache"}
-    )
+        raise HTTPException(status_code=404, detail="Thermal image not available")
+    return FileResponse(THERMAL_IMAGE_PATH, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/rgb/image")
 async def get_rgb_image():
-    """Get latest RGB camera image"""
+    """Get latest RGB camera image (fallback file-based)"""
     if not RGB_IMAGE_PATH.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="RGB image not available"
-        )
-
-    return FileResponse(
-        RGB_IMAGE_PATH,
-        media_type="image/jpeg",
-        headers={"Cache-Control": "no-cache"}
-    )
+        raise HTTPException(status_code=404, detail="RGB image not available")
+    return FileResponse(RGB_IMAGE_PATH, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
-# Live ROS topic snapshot for scan modal (from ros_sensor_bridge cache + UPLOAD_DIR images)
 @router.get("/live-snapshot", response_model=SensorData)
 async def get_live_snapshot():
     """Live ROS topic snapshot: temperature, humidity, thermal_mean + image URLs."""
     data = get_latest_from_ros()
 
-    # Fall back to JSON file written by standalone scripts/ros_sensor_bridge.py
-    # when the in-process ROS bridge cache is empty.
+    # Fall back to JSON file when ROS bridge cache is empty
     has_sensor_data = any(data.get(k) is not None for k in ("temperature", "humidity", "thermal_mean"))
     if not has_sensor_data and SENSOR_DATA_FILE.exists():
         try:
@@ -112,13 +91,13 @@ async def get_live_snapshot():
         except Exception:
             pass
 
-    # Prefer in-process bridge image paths; fall back to standalone script paths.
+    # Check in-memory bytes first, then fallback file paths
     thermal_image_url = (
-        "/api/sensors/live/thermal" if _live_thermal_path().exists()
+        "/api/sensors/live/thermal" if get_live_thermal_bytes() is not None
         else ("/api/sensors/thermal/image" if THERMAL_IMAGE_PATH.exists() else None)
     )
     rgb_image_url = (
-        "/api/sensors/live/rgb" if _live_rgb_path().exists()
+        "/api/sensors/live/rgb" if get_live_rgb_bytes() is not None
         else ("/api/sensors/rgb/image" if RGB_IMAGE_PATH.exists() else None)
     )
 
@@ -133,17 +112,34 @@ async def get_live_snapshot():
 
 @router.get("/live/thermal")
 async def get_live_thermal_image():
-    """Serve latest thermal image from ROS bridge (ros_latest.jpg)."""
-    path = _live_thermal_path()
-    if not path.exists():
+    """Serve latest thermal image directly from memory (no disk I/O)."""
+    jpeg_bytes = get_live_thermal_bytes()
+    if jpeg_bytes is None:
         raise HTTPException(status_code=404, detail="Thermal image not available")
-    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+    return Response(content=jpeg_bytes, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
 
 
 @router.get("/live/rgb")
 async def get_live_rgb_image():
-    """Serve latest RGB image from ROS bridge (ros_latest.jpg)."""
-    path = _live_rgb_path()
-    if not path.exists():
+    """Serve latest RGB image directly from memory (no disk I/O)."""
+    jpeg_bytes = get_live_rgb_bytes()
+    if jpeg_bytes is None:
         raise HTTPException(status_code=404, detail="RGB image not available")
-    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+    return Response(content=jpeg_bytes, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+
+
+@router.get("/debug/image-pipeline")
+async def debug_image_pipeline():
+    """Diagnostic: check image pipeline state."""
+    with _ros_cache["lock"]:
+        rgb_bytes = _ros_cache["rgb_image_bytes"]
+        thermal_bytes = _ros_cache["thermal_image_bytes"]
+    return {
+        "ros_bridge_thread_alive": _ros_thread is not None and _ros_thread.is_alive(),
+        "rgb_in_memory": rgb_bytes is not None,
+        "rgb_bytes_size": len(rgb_bytes) if rgb_bytes else 0,
+        "thermal_in_memory": thermal_bytes is not None,
+        "thermal_bytes_size": len(thermal_bytes) if thermal_bytes else 0,
+        "fallback_rgb_exists": RGB_IMAGE_PATH.exists(),
+        "fallback_thermal_exists": THERMAL_IMAGE_PATH.exists(),
+    }
