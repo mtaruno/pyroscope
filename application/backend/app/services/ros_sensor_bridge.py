@@ -142,20 +142,39 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         with _ros_cache["lock"]:
             _ros_cache["thermal_mean"] = msg.data
 
-    def _ros_image_to_jpeg(msg, encoding="passthrough"):
-        """Convert sensor_msgs/Image to JPEG bytes in memory."""
+    def _ros_image_to_jpeg(msg, encoding="passthrough", colormap=None):
+        """Convert sensor_msgs/Image to JPEG bytes in memory.
+        colormap: if set, apply a Matplotlib colormap to grayscale data (e.g. 'inferno').
+        """
         try:
             if _use_cv_bridge:
                 cv_img = _bridge.imgmsg_to_cv2(msg, desired_encoding=encoding)
                 if cv_img is not None:
+                    if colormap and len(cv_img.shape) == 2:
+                        # Grayscale -> colormap via Pillow
+                        pil_gray = PILImage.fromarray(cv_img)
+                        pil_img = _apply_thermal_colormap(pil_gray, colormap)
+                        buf = io.BytesIO()
+                        pil_img.save(buf, "JPEG", quality=85)
+                        return buf.getvalue()
                     _, buf = _cv2.imencode(".jpg", cv_img, [_cv2.IMWRITE_JPEG_QUALITY, 85])
                     return buf.tobytes()
             elif _use_pil:
                 channels = len(msg.data) // (msg.width * msg.height) if msg.width and msg.height else 3
-                arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, channels))
-                if msg.encoding in ("bgr8", "8UC3") or (encoding == "bgr8" and channels == 3):
-                    arr = arr[:, :, ::-1]  # BGR -> RGB
-                pil_img = PILImage.fromarray(arr)
+                if channels == 1:
+                    arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width))
+                else:
+                    arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, channels))
+                if channels == 1 or msg.encoding == "mono8":
+                    pil_gray = PILImage.fromarray(arr, mode="L")
+                    if colormap:
+                        pil_img = _apply_thermal_colormap(pil_gray, colormap)
+                    else:
+                        pil_img = pil_gray
+                else:
+                    if msg.encoding in ("bgr8", "8UC3") or (encoding == "bgr8" and channels == 3):
+                        arr = arr[:, :, ::-1]  # BGR -> RGB
+                    pil_img = PILImage.fromarray(arr)
                 buf = io.BytesIO()
                 pil_img.save(buf, "JPEG", quality=85)
                 return buf.getvalue()
@@ -163,11 +182,23 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
             logger.warning("Image encode failed (encoding=%s, %dx%d): %s", msg.encoding, msg.width, msg.height, e)
         return None
 
+    def _apply_thermal_colormap(pil_gray, colormap_name="inferno"):
+        """Apply a colormap to a grayscale PIL image, return RGB PIL image."""
+        try:
+            from matplotlib import colormaps
+            cmap = colormaps[colormap_name]
+        except (ImportError, KeyError):
+            # Fallback: manual inferno-like gradient (cold=blue, hot=yellow/white)
+            return pil_gray.convert("RGB")
+        gray_arr = np.array(pil_gray, dtype=np.float32) / 255.0
+        colored = (cmap(gray_arr)[:, :, :3] * 255).astype(np.uint8)
+        return PILImage.fromarray(colored)
+
     _rgb_logged = [False]
     _thermal_logged = [False]
 
     def cb_thermal_image(msg):
-        jpeg_bytes = _ros_image_to_jpeg(msg)
+        jpeg_bytes = _ros_image_to_jpeg(msg, colormap="inferno")
         if jpeg_bytes:
             with _ros_cache["lock"]:
                 _ros_cache["thermal_image_bytes"] = jpeg_bytes
