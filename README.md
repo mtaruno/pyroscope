@@ -33,6 +33,13 @@ Known environment issues:
 
 #### Demo
 
+Every time you turn on the robot, run these following commands in each terminal:
+1. roslaunch transbot_bringup bringup.launch
+2. roslaunch rplidar_ros rplidar.launch
+3. source ~/pyroscope/catkin_ws/devel/setup.bash
+   1. roslaunch transbot_sensors sensors.launch
+
+
 1. Place it in the dead center of the 3x3m square, facing along the longest open line (away from the obstacles). That gives it ~1.5m clearance to every wall, so:
   - The costmap initializes with free space all around
   - The first waypoint plan has room to route

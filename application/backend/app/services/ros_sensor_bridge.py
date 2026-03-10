@@ -167,6 +167,17 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
                     arr = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, channels))
                 if channels == 1 or msg.encoding == "mono8":
                     pil_gray = PILImage.fromarray(arr, mode="L")
+                elif colormap and channels == 3:
+                    # Thermal published as BGR but is visually grayscale — convert to gray
+                    if msg.encoding in ("bgr8", "8UC3") or encoding == "bgr8":
+                        rgb_arr = arr[:, :, ::-1]
+                    else:
+                        rgb_arr = arr
+                    pil_gray = PILImage.fromarray(rgb_arr).convert("L")
+                else:
+                    pil_gray = None
+
+                if pil_gray is not None:
                     if colormap:
                         pil_img = _apply_thermal_colormap(pil_gray, colormap)
                     else:
@@ -198,7 +209,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
     _thermal_logged = [False]
 
     def cb_thermal_image(msg):
-        jpeg_bytes = _ros_image_to_jpeg(msg, colormap="inferno")
+        jpeg_bytes = _ros_image_to_jpeg(msg, encoding="bgr8", colormap="inferno")
         if jpeg_bytes:
             with _ros_cache["lock"]:
                 _ros_cache["thermal_image_bytes"] = jpeg_bytes

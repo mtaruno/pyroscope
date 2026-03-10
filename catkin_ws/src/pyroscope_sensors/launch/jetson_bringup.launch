@@ -1,0 +1,10 @@
+<launch>
+  <!-- Master bringup: base driver + odometry + TF -->
+  <include file="$(find transbot_bringup)/launch/bringup.launch"/>
+
+  <!-- LiDAR -->
+  <include file="$(find rplidar_ros)/launch/rplidar.launch"/>
+
+  <!-- Pyroscope sensors: SHT40 + thermal + RealSense -->
+  <include file="$(find pyroscope_sensors)/launch/sensors.launch"/>
+</launch>
