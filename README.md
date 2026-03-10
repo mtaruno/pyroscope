@@ -1,29 +1,30 @@
-# pyroscope
+# Pyroscope
 
-This is a shrubland close to Ellensburg, WA, which is around a 2 hour drive away from Seattle. 
+**Autonomous wildfire fuel-load mapping rover** — GPS-guided, lidar-navigated, thermal-camera-equipped.
 
-![shrubs](shrubland.jpeg)
+<img src="assets/Poster.png" width="800" alt="Pyroscope Project Poster"/>
 
-One problem that these land managers face are wildfires. In this area itself, there was a huge one in 2012 that burned much of the trees that make up the shrubland. Land managers need to know the fuel load of these shrubberies to make plans about wildfire initiatives. But they don't have the time to sit around and do that. Worse, nobody really collects data on the ground in these environments. Neither can they usually afford people to walk these trails and manually measure fuel loads. 
+> Full resolution: [Poster.pdf](assets/Poster.pdf)
 
-Now here's what we made to combat this problem:
+---
 
-![Rover on Shrubs](ba5ac9779fb52d08976bb2c3c9e5a83b.jpg)
+This is a shrubland close to Ellensburg, WA, about 2 hours from Seattle.
 
-Pyroscope is a rover equipped with a depth camera, GPS, and thermal camera. It is designed to automate plot scale surface-fuel sampling for prescribed fire and AI fuel mapping. 
+![shrubs](assets/shrubland.jpeg)
 
-Pyroscope is small, lightweight, and maneuverable. This is in contrast to typical rovers that roam around the forest that are often larger and crush vegetation as it moves. 
+Land managers here need to know the fuel load of these shrubberies to plan wildfire initiatives — but they rarely have the staff or time to manually survey the ground. A large wildfire in 2012 burned much of this area, and without good fuel data, it's hard to plan controlled burns or predict future risk.
 
-The idea is that land managers will get a dashboard that gives them near real time information of ground conditions; and get alerts of potential wildfire outbreaks.
+**Here's what we built:**
 
-Here is the architecture of Pyroscope:
-![alt text](<CleanShot 2026-02-12 at 00.28.06@2x.png>)
+<img src="assets/ba5ac9779fb52d08976bb2c3c9e5a83b.jpg" width="700" alt="Pyroscope rover in the field"/>
+
+Pyroscope is a small, lightweight, maneuverable rover equipped with a depth camera, GPS, and thermal camera. Unlike larger forestry rovers that crush vegetation, Pyroscope is designed to move through shrubland without disturbing it.
+
+Land managers get a near real-time dashboard of ground conditions and alerts for potential wildfire outbreaks.
 
 ### Navigation
 
 The navigation system is built on ROS Melodic and runs across two machines: the Transbot (Jetson) handles hardware drivers and sensors, while a remote Ubuntu 18.04 PC runs navigation modules such as obstacle detection and high-level path planning.
-
-
 
 Here's the simplest operation, teleooperating the robot: roslaunch transbot_ctrl transbot_keyboard.launch
 
