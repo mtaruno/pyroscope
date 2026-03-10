@@ -3,13 +3,13 @@
 
 DWAPlannerROS:
   # Robot velocity limits (conservative for uneven terrain)
-  max_vel_x: 0.30
+  max_vel_x: 0.45
   min_vel_x: -0.10
   max_vel_y: 0.0
   min_vel_y: 0.0
   max_vel_theta: 1.2
   min_vel_theta: -1.2
-  min_vel_trans: 0.05
+  min_vel_trans: 0.08
   acc_lim_x: 1.5
   acc_lim_y: 0.0
   acc_lim_theta: 3.0
@@ -28,8 +28,8 @@ DWAPlannerROS:
 
   # Trajectory scoring -- balance reaching goals vs avoiding walls
   path_distance_bias: 20.0
-  goal_distance_bias: 24.0
-  occdist_scale: 0.5
+  goal_distance_bias: 28.0
+  occdist_scale: 0.3
 
   # Oscillation prevention
   oscillation_reset_dist: 0.10
