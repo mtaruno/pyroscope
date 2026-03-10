@@ -4,6 +4,7 @@ store sample and images. Data source: ROS topics (when ROS_MASTER_URI is set) or
 """
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -11,6 +12,8 @@ import threading
 from pathlib import Path
 from typing import Optional
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 from app.database import SessionLocal
 from app.models.waypoint_sample import ScanWaypointSample
@@ -131,6 +134,7 @@ def _capture_loop_impl(scan_id: int):
         if use_ros:
             if not capture_ready:
                 continue
+            logger.warning("capture_ready trigger received for waypoint %d", sequence_index)
             with _capture_state_lock:
                 _capture_state["last_capture_ready"] = True
         else:
@@ -205,7 +209,14 @@ def _capture_loop_impl(scan_id: int):
                 sample.rgb_image_id = rgb_image.id
 
             db.commit()
-        except Exception:
+            logger.warning("Waypoint %d saved: temp=%s, humidity=%s, thermal=%s, rgb=%s",
+                           sequence_index,
+                           sht40_data.get("temperature"),
+                           sht40_data.get("humidity"),
+                           thermal_data.get("thermal_mean"),
+                           rgb_waypoint_path)
+        except Exception as e:
+            logger.error("Failed to save waypoint %d: %s", sequence_index, e, exc_info=True)
             db.rollback()
         finally:
             db.close()
@@ -228,14 +239,19 @@ def _capture_loop_impl(scan_id: int):
 
 def start_capture_loop(scan_id: int, total_points: Optional[int] = None) -> None:
     """Start background thread that captures on each ROS '/coverage/capture_ready'=true event."""
-    if _capture_state["thread"] is not None and _capture_state["thread"].is_alive():
-        return
+    old_thread = _capture_state["thread"]
+    if old_thread is not None and old_thread.is_alive():
+        logger.warning("Capture loop already running (scan_id=%s), stopping it first", _capture_state.get("scan_id"))
+        stop_capture_loop()
+    # Clean up any dead thread reference
+    _capture_state["thread"] = None
     thermal_dir = os.path.join(settings.UPLOAD_DIR, "thermal_latest")
     rgb_dir = os.path.join(settings.UPLOAD_DIR, "realsense_latest")
     os.makedirs(thermal_dir, exist_ok=True)
     os.makedirs(rgb_dir, exist_ok=True)
     use_ros = is_ros_configured() and start_ros_bridge(thermal_dir, rgb_dir)
     clear_capture_ready_queue()
+    logger.warning("Starting capture loop: scan_id=%d, total_points=%s, use_ros=%s", scan_id, total_points, use_ros)
     _capture_state["use_ros"] = use_ros
     _capture_state["stop_event"] = threading.Event()
     with _capture_state_lock:
