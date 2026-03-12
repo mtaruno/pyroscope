@@ -1,6 +1,6 @@
 # Pyroscope
 
-**Autonomous wildfire fuel-load mapping rover** — GPS-guided, lidar-navigated, thermal-camera-equipped.
+**Autonomous wildfire fuel-load mapping rover** - GPS-guided, lidar-navigated, thermal-camera-equipped.
 
 <img src="assets/Poster.png" width="800" alt="Pyroscope Project Poster"/>
 
@@ -8,324 +8,288 @@
 
 ---
 
-This is a shrubland close to Ellensburg, WA, about 2 hours from Seattle.
+This project is grounded in field conditions near Ellensburg, WA, about 2 hours from Seattle.
 
-![shrubs](assets/shrubland.jpeg)
+![Shrubland site](assets/shrubland.jpeg)
 
-Land managers here need to know the fuel load of these shrubberies to plan wildfire initiatives — but they rarely have the staff or time to manually survey the ground. A large wildfire in 2012 burned much of this area, and without good fuel data, it's hard to plan controlled burns or predict future risk.
+One really good place to look at to assess wildfire risk are weather stations. However, weather stations are based mostly on dead-fuels, and there is little signal from actual live-fuel conditions. Pyroscope is designed to fill that gap by providing a mobile platform for collecting live-fuel data by measuring the temperature of the foilage on the ground vs the surrounding air to have a proxy for soil moisture levels. 
 
-**Here's what we built:**
+Land managers in shrubland ecosystems need reliable surface fuel-load data to plan prescribed burns and reduce wildfire risk, but manual ground sampling is slow, expensive, and hard to scale. A major wildfire in 2012 burned much of this area, highlighting the need for better field intelligence.
+
+Pyroscope was built to close that gap.
 
 <img src="assets/ba5ac9779fb52d08976bb2c3c9e5a83b.jpg" width="700" alt="Pyroscope rover in the field"/>
 
-Pyroscope is a small, lightweight, maneuverable rover equipped with a depth camera, GPS, and thermal camera. Unlike larger forestry rovers that crush vegetation, Pyroscope is designed to move through shrubland without disturbing it.
+Pyroscope is a compact rover that carries thermal and environmental sensors and streams mission data to a dashboard in near real time.
 
-Land managers get a near real-time dashboard of ground conditions and alerts for potential wildfire outbreaks.
+## What This Repository Contains
 
-### Navigation
+- ROS navigation and sensor stack: `catkin_ws/src/...`
+- FastAPI backend APIs and mission control: `application/backend`
+- React dashboard frontend: `application`
 
-The navigation system is built on ROS Melodic and runs across two machines: the Transbot (Jetson) handles hardware drivers and sensors, while a remote Ubuntu 18.04 PC runs navigation modules such as obstacle detection and high-level path planning.
+## Project Structure
 
-Here's the simplest operation, teleooperating the robot: roslaunch transbot_ctrl transbot_keyboard.launch
-
-Known environment issues:
-- If there is no rospkg, do pip3 install rospkg
-
-
-#### Demo
-
-Every time you turn on the robot, run these following commands in each terminal:
-1. roslaunch transbot_bringup bringup.launch
-2. roslaunch rplidar_ros rplidar.launch
-3. source ~/pyroscope/catkin_ws/devel/setup.bash
-   1. roslaunch transbot_sensors sensors.launch
-
-
-1. Place it in the dead center of the 3x3m square, facing along the longest open line (away from the obstacles). That gives it ~1.5m clearance to every wall, so:
-  - The costmap initializes with free space all around
-  - The first waypoint plan has room to route
-  - If recovery triggers (rotate in place), it won't sweep into a wall
-
-Also, set the origin so waypoints start from the center rather than from a corner near a wall:
-roslaunch pyroscope_navigation coverage_mission_nav.launch \
-    area_width:=2 area_height:=2 \
-    origin_x:=-1.0 origin_y:=-1.0
-
-This centers the 2x2m coverage grid around the robot's starting position (0,0 in odom frame) instead of starting from corner (0,0) and going to (2,2) -- which would put
-  half the waypoints near the far walls.
-
-For the getting-stuck-on-walls problem, the robot should recover on its own now with the reduced inflation. But if it does get stuck again, you can cancel the current goal without killing everything:
-
-rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID '{}'
-
-This tells move_base to stop pursuing the current waypoint. The coverage planner will then time out and move to the next one -- no need to physically touch the robot.
-
-
-#### Coverage Path Planning
-- Boustrophedon (lawnmower) pattern covers a configurable rectangular area (default 10m x 10m, 1m spacing)
-- Pauses 3 seconds at each waypoint for thermal camera capture (`/coverage/capture_ready`)
-- Publishes mission progress to `/coverage/progress`
-
-To launch this coverage mission:
-1. roscore (on remote PC)
-2. roslaunch transbot_bringup bringup.launch (on Transbot)
-3. roslaunch rplidar_ros rplidar.launch (on Transbot)
-4. roslaunch transbot_nav navigation.launch map_file:=$(rospack find transbot_nav)/maps/pyroscope_map.yaml (on remote PC)
-5. rviz
-6. Make sure that you source the devel/setup.bash
-7. roslaunch pyroscope_navigation coverage_mission.launch
-8. roslaunch pyroscope_navigation coverage_mission.launch \
-    area_width:=5.0 \
-    area_height:=5.0 \
-    row_spacing:=0.8 \
-    waypoint_spacing:=0.5 \
-    origin_x:=0.0 \
-    origin_y:=0.0 \
-    dwell_time:=2.0 \
-    waypoint_timeout:=30.0
-
-Testing the odometry:
-timeout 3 rostopic pub /cmd_vel geometry_msgs/Twist '{linear: {x: 0.3}}'
-
-If you want to publish zero velocity in attempt to stop the robot:
-`rostopic pub -1 /cmd_vel geometry_msgs/Twist '{linear: {x: 0, y: 0, z: 0}, angular: {x: 0, y: 0, z: 0}}`
-
-Monitoring:
-7. rostopic echo /coverage/progress
-8. rostopic echo /coverage/complete
-9. rostopic echo/nav/goal_reached
-10. rostopic hz /scan
-11. rosrun tf view_frames && evince frames.pdf
-
-rosrun tf static_transform_publisher 0 0 0.15 0 0 0 base_link laser 100 &
-
-rosrun tf tf_monitor
-
-Make sure odometry is working:
-# Terminal 1: Start teleop keyboard
-roslaunch transbot_ctrl transbot_keyboard.launch
-
-# Terminal 2: Watch X position
-rostopic echo /odom --filter "print('x:', m.pose.pose.position.x, '  y:', m.pose.pose.position.y)"
-
-# Drive forward with keyboard (W key or up arrow)
-# Watch the terminal
-
-Expected behavior:
-- ✅ X value increases as you drive forward → Odometry works!
-- ❌ X value stays at 0.0 → Odometry broken!
-
-#### Obstacle Avoidance (move_base + costmaps)
-
-The coverage mission uses ROS `move_base` with DWA local planning and rolling-window costmaps to navigate around obstacles in real time. No pre-built map is required -- the costmaps are built live from lidar data.
-
-- **Global costmap** -- 15x15m rolling window in the `odom` frame. NavfnROS plans a path from robot to each waypoint.
-- **Local costmap** -- 4x4m rolling window. DWA local planner samples velocity trajectories and picks the best one that avoids obstacles.
-- **Inflation layer** -- expands detected obstacles by 0.25m so the robot keeps a safe buffer.
-
-#### How the planner works step by step
-
-The full planning pipeline runs continuously while the robot drives to each waypoint:
-
-```
- /scan (lidar)
-    |
-    v
- +---------------------+
- | Costmap Obstacle     |  Marks cells as LETHAL (254) where lidar hits
- | Layer                |  Clears cells along raytrace (no obstacle there)
- +---------------------+
-    |
-    v
- +---------------------+
- | Costmap Inflation    |  Expands every lethal cell outward by 0.25m
- | Layer                |  Gradient: lethal (254) -> 0 over the radius
- +---------------------+  Robot footprint fits? Safe. Overlaps inflation? Penalized.
-    |
-    v
- +--+------------------+     +---------------------+
- | Global Costmap      |     | Local Costmap       |
- | (15m x 15m)         |     | (4m x 4m)           |
- | Rolling window      |     | Rolling window      |
- | Updates at 2 Hz     |     | Updates at 5 Hz     |
- +---------------------+     +---------------------+
-    |                              |
-    v                              v
- +---------------------+     +---------------------+
- | NavfnROS            |     | DWA Local Planner   |
- | (Global Planner)    |     |                     |
- | Dijkstra on the     |     | 1. Sample velocities|
- | global costmap grid |     |    (vx, vtheta)     |
- | Plans full path     |     | 2. Simulate 2.0s    |
- | from robot to goal  |     |    forward          |
- | Replans at 1 Hz     |     | 3. Score each:      |
- +---------------------+     |    - path follow: 20|
-    |                         |    - goal progress:32|
-    | global path             |    - obstacle dist:  |
-    v                         |      0.05           |
- +---------------------+     | 4. Pick best        |
- | DWA follows the     |<----+    collision-free    |
- | global path but     |     |    trajectory       |
- | adapts locally      |     | 5. Publish /cmd_vel |
- +---------------------+     |    at 5 Hz          |
-                              +---------------------+
+```text
+pyroscope/
+├── assets/
+│   ├── Poster.png
+│   ├── Poster.pdf
+│   └── ...
+├── catkin_ws/
+│   └── src/
+│       ├── pyroscope_navigation/      # Coverage planner, move_base launch, safety nodes
+│       ├── pyroscope_sensors/         # Sensor launch/scripts (SHT40, thermal, camera)
+│       ├── transbot_bringup/          # Base driver + odometry + TF
+│       ├── transbot_ctrl/             # Teleop tools
+│       └── transbot_nav/              # Legacy map-based nav package
+├── application/
+│   ├── backend/                       # FastAPI app, DB models, ROS sensor bridge
+│   ├── src/                           # React dashboard source
+│   └── package.json
+├── SENSOR_INTEGRATION_SETUP.md
+└── README.md
 ```
 
-**Costmap cell values:**
-- 254 = lethal (obstacle detected here, do not enter)
-- 253 = inscribed (robot center here = collision)
-- 1-252 = inflation gradient (higher = closer to obstacle = more costly)
-- 0 = free space
+## System Layout
 
-**Example: robot approaches a wall at waypoint (2, 0)**
-1. Lidar sees wall at 1.5m ahead
-2. Obstacle layer marks those cells as 254 in both costmaps
-3. Inflation layer expands the wall by 0.25m with a cost gradient
-4. NavfnROS runs Dijkstra -- the cheapest global path now curves around the wall
-5. DWA samples 12 forward speeds x 20 rotation speeds = 240 candidate trajectories
-6. Trajectories that pass through inflated cells get penalized by `occdist_scale`
-7. Trajectories that collide with lethal cells are rejected entirely
-8. The winning trajectory curves the robot away from the wall toward the goal
-9. If no collision-free trajectory exists, move_base triggers recovery (rotate in place to clear costmap, then retry)
-10. If recovery fails, move_base aborts and coverage_planner skips to the next waypoint
+Typical runtime uses multiple machines:
 
-**Why the robot should never hit a wall:**
-- The inflation radius (0.25m) is larger than the robot's half-width (0.125m)
-- DWA will not select any trajectory that enters the inscribed radius
-- Even if the global path passes near a wall, DWA locally avoids it
-- The costmap updates at 5 Hz from live lidar, so new obstacles are seen within 200ms
+- Jetson (robot): base bringup, lidar, onboard sensors
+- Remote Ubuntu PC (same ROS network): `move_base` + coverage planner (and optionally backend)
+- Frontend machine: React dashboard
 
-**Prerequisites (install once on the remote PC):**
+Main autonomy path:
+
+1. `pyroscope_sensors/launch/jetson_bringup.launch` starts base + lidar + sensors.
+2. `pyroscope_navigation/launch/coverage_mission_nav.launch` starts `move_base` and coverage planner.
+3. Coverage planner sends waypoints; `move_base` performs local obstacle avoidance with DWA.
+
+## Prerequisites
+
+- Ubuntu 18.04 with ROS Melodic for the ROS stack
+- Python 3.9+ for backend
+- Node.js 18+ for frontend
+- MySQL 8+ for backend persistence
+
+Install ROS navigation deps on the machine running `move_base`:
 
 ```bash
 sudo apt install ros-melodic-move-base ros-melodic-dwa-local-planner \
   ros-melodic-navfn ros-melodic-move-base-msgs
 ```
 
-**To launch the coverage mission with obstacle avoidance:**
+## One-Time Setup
 
-1. roscore (on remote PC)
-2. roslaunch transbot_bringup bringup.launch (on Transbot)
-3. roslaunch rplidar_ros rplidar.launch (on Transbot)
-4. source ~/pyroscope/catkin_ws/devel/setup.bash (on remote PC)
-5. roslaunch pyroscope_navigation coverage_mission_nav.launch \
-    area_width:=3.0 \
-    area_height:=3.0 \
-    row_spacing:=1.0 \
-    waypoint_spacing:=1.0
-
-Note: steps 2-3 provide `/odom`, `/scan`, and the `odom -> base_link` TF that move_base requires. The launch file adds the `base_link -> laser` static TF.
-
-**Verify move_base is running:**
+### 1) Build catkin workspace
 
 ```bash
-rostopic list | grep move_base
+cd ~/pyroscope/catkin_ws
+catkin_make
+source devel/setup.bash
 ```
 
-Should see `/move_base/status`, `/move_base/global_costmap/costmap`, `/move_base/local_costmap/costmap`
+### 2) Backend setup
 
 ```bash
-rosrun tf tf_monitor
+cd ~/pyroscope/application/backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+alembic upgrade head
 ```
 
-Should show the full chain: `odom -> base_link -> laser`
+Set environment in `application/backend/.env` (minimum):
 
-**Monitor mission progress:**
+```env
+DATABASE_URL=mysql+pymysql://<user>:<password>@localhost:3306/pyroscope_db
+JWT_SECRET_KEY=<your-secret>
+ROS_MASTER_URI=http://<JETSON_IP>:11311
+ROS_IP=<BACKEND_PC_IP>
+```
+
+### 3) Frontend setup
+
+```bash
+cd ~/pyroscope/application
+npm install
+```
+
+Note: API base URL is currently hardcoded in `application/src/services/api.js`. Update it for your backend host.
+
+## How To Run
+
+### A) ROS Navigation + Sensors (no web stack)
+
+Terminal 1 (Jetson):
+
+```bash
+source ~/pyroscope/catkin_ws/devel/setup.bash
+roslaunch pyroscope_sensors jetson_bringup.launch # this is a consolidated launch file that launches all the sensors and brings up the robot sensors, lidar, and bringup
+```
+
+This launches:
+
+- `transbot_bringup/bringup.launch`
+- `rplidar_ros/rplidar.launch`
+- `pyroscope_sensors/sensors.launch`
+
+Terminal 2 (Remote PC or same ROS machine):
+
+```bash
+source ~/pyroscope/catkin_ws/devel/setup.bash
+
+# the front end takes care of this, but this could be manually run as well: 
+roslaunch pyroscope_navigation coverage_mission_nav.launch \
+  area_width:=3.0 area_height:=3.0 row_spacing:=1.0 waypoint_spacing:=1.0 \
+  origin_x:=0.0 origin_y:=0.0 dwell_time:=3.0 waypoint_timeout:=60.0
+```
+
+What to expect:
+
+- `move_base` topics appear (`/move_base/status`, costmaps, plans)
+- `/coverage/progress` advances from `0/N` to `N/N`
+- Robot follows a lawnmower pattern centered around `(origin_x, origin_y)` in `odom`
+- If waypoints fail repeatedly, planner attempts recovery (clear costmaps) and continues mission
+
+Quick checks:
 
 ```bash
 rostopic echo /coverage/progress
 rostopic echo /move_base/status
+rosrun tf tf_monitor
 ```
 
-**Rviz visualization:**
+Expected TF chain: `odom -> base_link -> laser`
 
-Open rviz and set Fixed Frame to `odom`. Add these displays:
+Emergency cancel current goal:
 
-| Display    | Topic                                        | What it shows                              |
-| ---------- | -------------------------------------------- | ------------------------------------------ |
-| LaserScan  | `/scan`                                      | Raw lidar points                           |
-| Map        | `/move_base/local_costmap/costmap`           | 4x4m obstacle grid around robot            |
-| Map        | `/move_base/global_costmap/costmap`          | 15x15m planning grid                       |
-| Path       | `/move_base/NavfnROS/plan`                   | Global planned route (green)               |
-| Path       | `/move_base/DWAPlannerROS/local_plan`        | Local DWA trajectory (red)                 |
-| Pose       | `/move_base/current_goal`                    | Current target waypoint                    |
+```bash
+rostopic pub -1 /move_base/cancel actionlib_msgs/GoalID '{}'
+```
 
-Place an object between the robot and the next waypoint -- you should see the costmap light up and the local path curve around it.
+### B) Full Stack (ROS + Backend + Frontend)
 
-**Troubleshooting:**
+Terminal 1 (Jetson):
 
-- "Cannot launch node of type move_base/move_base" -- run the `sudo apt install` line above
-- "Waiting for move_base action server..." then aborts -- check `rosnode list` for `/move_base` and terminal output for TF or `/scan` errors
-- Robot spinning in place -- goal may be inside an inflated obstacle. Check the costmap in rviz
-- Global planner fails -- waypoint may be outside the 15m costmap window. The planner warns at startup if consecutive waypoints exceed 7.5m
+```bash
+source ~/pyroscope/catkin_ws/devel/setup.bash
+roslaunch pyroscope_sensors jetson_bringup.launch
+```
 
-#### Legacy Obstacle Avoidance (coverage_mission.launch)
+Terminal 2 (Backend host):
 
-The original `coverage_mission.launch` is still available as a fallback. It uses a simpler approach with no path planning:
-- **Lidar obstacle detector** -- monitors the front +/-30 deg arc of the RPLidar scan. Publishes `/obstacle_detected` when anything is within 0.30m
-- **Safety stop** -- overrides `/cmd_vel` with a stop command whenever an obstacle is detected
-- The robot stops on obstacle detection and skips the waypoint after 5 seconds
+```bash
+cd ~/pyroscope/application/backend
+source venv/bin/activate
+python run.py
+```
 
-#### Key Launch Files
-| Launch File                                          | Description                                              |
-| ---------------------------------------------------- | -------------------------------------------------------- |
-| `transbot_slam/slam_gmapping.launch`                 | Build a map with GMapping                                |
-| `transbot_nav/navigation.launch`                     | AMCL + move_base navigation with a saved map             |
-| `pyroscope_navigation/coverage_mission_nav.launch`   | Coverage mission with move_base obstacle avoidance       |
-| `pyroscope_navigation/coverage_mission.launch`       | Coverage mission with simple stop-on-obstacle (legacy)   |
-| `pyroscope_navigation/obstacle_avoidance.launch`     | Standalone obstacle avoidance layer                      |
-| `transbot_ctrl/transbot_keyboard.launch`             | Keyboard teleoperation                                   |
+Terminal 3 (Frontend host):
 
-#### ZED 2i Testing
-Simple hardware test:
-1. Plug the ZED 2i into a USB 3.0 port
-2. Run lsusb - you should see the camera listed as a USB device
-3. Check USB connection: dmesg | tail after plugging in
+```bash
+cd ~/pyroscope/application
+npm run dev
+```
 
-With SDK installed:
-1. Download ZED SDK (make sure it's the right version for the Jetson)
-2. Install prerequisites: sudo apt install zstd
-3. Install the SDK following their installer
-4. Run test tools:
-  - ZED_Explorer - GUI tool to test camera
-  - ZED_Depth_Viewer - View depth output
-  - Run sample applications in /usr/local/zed/tools/
+Open dashboard: `http://localhost:5173`
 
-### Backend
+What to expect:
 
-Instructions for setting up the backend:
-1. Install MySQL (using MySQL 8.0 for Ubuntu 18.04)
-2. ...
+- Backend on `:8000` with `/docs` and `/health`
+- If `ROS_MASTER_URI` is set, ROS sensor bridge auto-starts at backend startup
+- `/api/sensors/availability` returns `available: true` when required topics are present
+- Dashboard shows live sensor data and mission controls
 
-To test from the backend:
-                                                                                  
-1. Start the backend                                                             
-  cd /Users/matthewtaruno/Dev/pyroscope/application/backend
-  python run.py
+API sanity checks:
 
-2. Start a mission via API
-  curl -X POST http://localhost:8000/api/robot/mission/start \
-    -H "Content-Type: application/json" \
-    -d '{"area_width": 10.0, "area_height": 10.0, "row_spacing": 1.0,
-  "waypoint_spacing": 1.0}'
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/api/sensors/availability
+curl http://localhost:8000/api/robot/mission/status
+```
 
-3. Check status
-  curl http://localhost:8000/api/robot/mission/status
+## Mission API Quickstart
 
-4. Stop mission
-  curl -X POST http://localhost:8000/api/robot/mission/stop
+Start mission:
 
+```bash
+curl -X POST http://localhost:8000/api/robot/mission/start \
+  -H "Content-Type: application/json" \
+  -d '{"area_width":3.0,"area_height":3.0,"row_spacing":1.0,"waypoint_spacing":1.0,"origin_x":0.0,"origin_y":0.0}'
+```
 
-### Perception
-Percetion is led by Chenghao Wang. The perception system is responsible for taking downward-facing images of the fuel plots and estimating the surface fuel loads from these images.
+Check status:
 
-### Hardware + Design
-This is led by Annika An. She designed the hardware for the robot, putting together the Lidar, cameras, and other sensors. She also designed the front-end dashboard for the robot.
+```bash
+curl http://localhost:8000/api/robot/mission/status
+```
 
-### Evaluating Success
-- Decision-ready plots per staff-day.
-  - Plots that have (a) QC-passed images, (b) model fuel estimates, and (c) appear on a unit dashboard actually used by the planner.
-  - Baseline (manual): ~14 plots/day.
-  - MVP target (robot): ≥30 plots/day.
+Stop mission:
 
+```bash
+curl -X POST http://localhost:8000/api/robot/mission/stop
+```
 
+## Other Useful Launch Modes
+
+Keyboard teleop:
+
+```bash
+roslaunch transbot_ctrl transbot_keyboard.launch
+```
+
+Manual waypoint controller:
+
+```bash
+roslaunch pyroscope_navigation exploration.launch
+rosrun pyroscope_navigation test_single_waypoint.py 2.0 1.0
+```
+
+Random exploration:
+
+```bash
+roslaunch pyroscope_navigation random_exploration.launch
+```
+
+Standalone safety layer:
+
+```bash
+roslaunch pyroscope_navigation obstacle_avoidance.launch
+```
+
+## Key Launch Files
+
+| Launch file                                                             | Purpose                                            |
+| ----------------------------------------------------------------------- | -------------------------------------------------- |
+| `catkin_ws/src/pyroscope_sensors/launch/jetson_bringup.launch`          | One-command robot bringup (base + lidar + sensors) |
+| `catkin_ws/src/pyroscope_navigation/launch/coverage_mission_nav.launch` | Primary autonomous coverage (`move_base` + DWA)    |
+| `catkin_ws/src/pyroscope_navigation/launch/exploration.launch`          | Manual waypoint navigation                         |
+| `catkin_ws/src/pyroscope_navigation/launch/random_exploration.launch`   | Random walk mobility test mode                     |
+| `catkin_ws/src/pyroscope_navigation/launch/obstacle_avoidance.launch`   | Lidar obstacle detector + safety stop              |
+
+## Troubleshooting
+
+- `move_base` not found:
+  - Install ROS nav packages listed in Prerequisites.
+- Planner waits for action server then aborts:
+  - Confirm `coverage_mission_nav.launch` is running and TF chain is valid.
+- Sensors unavailable in backend:
+  - Verify `ROS_MASTER_URI`/`ROS_IP`, then run:
+    - `application/backend/scripts/diagnose_sensor_availability.sh`
+- Odometry missing:
+  - Run `catkin_ws/src/pyroscope_navigation/scripts/check_topics.sh`
+
+## Known Caveats
+
+- Use `coverage_mission_nav.launch` as the primary autonomous mode.
+- `coverage_mission.launch` is legacy and not the preferred demo path.
+- Very small mission areas can trigger edge-case waypoint fallback behavior.
+
+## Additional Documentation
+
+- `catkin_ws/src/pyroscope_navigation/README.md`
+- `catkin_ws/src/pyroscope_sensors/README.md`
+- `application/backend/SETUP.md`
+- `application/backend/ROS_SENSOR_SETUP.md`
+- `SENSOR_INTEGRATION_SETUP.md`
