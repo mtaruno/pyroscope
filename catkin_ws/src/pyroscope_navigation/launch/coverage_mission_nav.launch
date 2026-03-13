@@ -6,7 +6,7 @@
     <arg name="waypoint_spacing" default="0.5"/>
     <arg name="origin_x" default="0.0"/>
     <arg name="origin_y" default="0.0"/>
-    <arg name="wall_margin" default="0.30"/>
+    <arg name="wall_margin" default="0.45"/>
     <arg name="make_plan_tolerance" default="0.25"/>
     <arg name="target_cost_threshold" default="85"/>
     <arg name="target_check_radius" default="0.10"/>
