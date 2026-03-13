@@ -263,7 +263,7 @@ def _capture_loop_impl(scan_id: int):
             _capture_state["status"] = "stopped"
 
 
-def start_capture_loop(scan_id: int, total_points: Optional[int] = None) -> None:
+def start_capture_loop(scan_id: int, total_points: Optional[int] = None, require_ros: bool = False) -> None:
     """Start background thread that captures on each ROS '/coverage/capture_ready'=true event."""
     old_thread = _capture_state["thread"]
     if old_thread is not None and old_thread.is_alive():
@@ -275,7 +275,9 @@ def start_capture_loop(scan_id: int, total_points: Optional[int] = None) -> None
     rgb_dir = os.path.join(settings.UPLOAD_DIR, "realsense_latest")
     os.makedirs(thermal_dir, exist_ok=True)
     os.makedirs(rgb_dir, exist_ok=True)
-    use_ros = is_ros_configured() and start_ros_bridge(thermal_dir, rgb_dir)
+    use_ros = start_ros_bridge(thermal_dir, rgb_dir)
+    if require_ros and not use_ros:
+        raise RuntimeError("ROS bridge unavailable; refusing to simulate mission captures")
     clear_capture_ready_queue()
     clear_coverage_state()
     logger.warning("Starting capture loop: scan_id=%d, total_points=%s, use_ros=%s", scan_id, total_points, use_ros)

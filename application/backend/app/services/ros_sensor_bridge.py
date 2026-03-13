@@ -16,8 +16,10 @@ Waypoint capture service handles its own disk saves for scan records.
 import io
 import os
 import logging
+import socket
 import threading
 from typing import Optional, Dict, Any
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +48,7 @@ _ros_cache: Dict[str, Any] = {
 }
 _ros_thread: Optional[threading.Thread] = None
 _ros_stop = threading.Event()
+DEFAULT_LOCAL_ROS_MASTER_URI = "http://127.0.0.1:11311"
 
 
 def voltage_to_percent(voltage: float) -> int:
@@ -55,6 +58,32 @@ def voltage_to_percent(voltage: float) -> int:
     except Exception:
         return 0
     return max(0, min(100, int(round(percent))))
+
+
+def _can_reach_ros_master(uri: str, timeout_sec: float = 0.5) -> bool:
+    if not uri:
+        return False
+    try:
+        parsed = urlparse(uri)
+        host = parsed.hostname
+        port = parsed.port or 11311
+        if not host:
+            return False
+        with socket.create_connection((host, port), timeout=timeout_sec):
+            return True
+    except OSError:
+        return False
+
+
+def get_ros_master_uri() -> str:
+    from app.config import settings
+
+    configured = (settings.ROS_MASTER_URI or os.environ.get("ROS_MASTER_URI") or "").strip()
+    if configured:
+        return configured
+    if _can_reach_ros_master(DEFAULT_LOCAL_ROS_MASTER_URI):
+        return DEFAULT_LOCAL_ROS_MASTER_URI
+    return ""
 
 
 def get_live_rgb_bytes() -> Optional[bytes]:
@@ -298,11 +327,15 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
 
 
 def start_ros_bridge(thermal_image_save_dir: str, rgb_image_save_dir: str) -> bool:
-    """Start the ROS subscriber thread if ROS_MASTER_URI is set. Return True if using ROS."""
+    """Start the ROS subscriber thread when a reachable ROS master is available."""
     global _ros_thread
     from app.config import settings
-    uri = (settings.ROS_MASTER_URI or os.environ.get("ROS_MASTER_URI") or "").strip()
+    uri = get_ros_master_uri()
     if not uri:
+        logger.warning("ROS bridge not started: no ROS master configured or reachable")
+        return False
+    if not _can_reach_ros_master(uri):
+        logger.warning("ROS bridge not started: ROS master %s is not reachable", uri)
         return False
     if _ros_thread is not None and _ros_thread.is_alive():
         return True
@@ -376,9 +409,7 @@ def clear_capture_ready_queue() -> None:
 
 
 def is_ros_configured() -> bool:
-    from app.config import settings
-    uri = (settings.ROS_MASTER_URI or os.environ.get("ROS_MASTER_URI") or "").strip()
-    return bool(uri)
+    return bool(get_ros_master_uri())
 
 
 def get_required_topics_status() -> Dict[str, Any]:

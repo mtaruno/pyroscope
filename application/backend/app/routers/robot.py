@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from datetime import datetime
+import time
 from app.database import get_db
 from app.models.robot import RobotStatus
 from app.models.scan import ScanRecord
@@ -151,18 +152,17 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
         )
         cmd = ['bash', '-c', ros_cmd]
 
-        # Start the mission as a background process (may fail on non-ROS hosts; continue for capture)
-        try:
-            mission_process = subprocess.Popen(
-                cmd,
-                env=clean_env,
-                preexec_fn=os.setsid if hasattr(os, "setsid") else None,
-            )
-        except Exception:
-            mission_process = None  # noqa: PLW0602
+        mission_process = subprocess.Popen(
+            cmd,
+            env=clean_env,
+            preexec_fn=os.setsid if hasattr(os, "setsid") else None,
+        )
+        time.sleep(1.0)
+        if mission_process.poll() is not None:
+            raise RuntimeError(f"roslaunch exited immediately with return code {mission_process.returncode}")
 
         # Start waypoint capture loop (one sample per '/coverage/capture_ready'=true message).
-        start_capture_loop(scan_id, total_points=total_points)
+        start_capture_loop(scan_id, total_points=total_points, require_ros=True)
         progress = get_capture_progress()
 
         return {
@@ -177,6 +177,17 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
         }
 
     except Exception as e:
+        if mission_process is not None and mission_process.poll() is None:
+            try:
+                pgid = os.getpgid(mission_process.pid)
+                if pgid != os.getpgrp():
+                    os.killpg(pgid, signal.SIGTERM)
+                else:
+                    mission_process.terminate()
+                mission_process.wait(timeout=5)
+            except Exception:
+                pass
+            mission_process = None  # noqa: PLW0602
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to start mission: {str(e)}"
