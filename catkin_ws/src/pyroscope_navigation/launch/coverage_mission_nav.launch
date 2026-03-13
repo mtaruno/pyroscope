@@ -10,6 +10,8 @@
     <arg name="make_plan_tolerance" default="0.25"/>
     <arg name="target_cost_threshold" default="85"/>
     <arg name="target_check_radius" default="0.10"/>
+    <arg name="no_target_retry_limit" default="8"/>
+    <arg name="no_target_retry_sleep" default="1.5"/>
     <arg name="dwell_time" default="3.0"/>
     <arg name="waypoint_timeout" default="60.0"/>
 
@@ -59,6 +61,8 @@
         <param name="make_plan_tolerance" value="$(arg make_plan_tolerance)"/>
         <param name="target_cost_threshold" value="$(arg target_cost_threshold)"/>
         <param name="target_check_radius" value="$(arg target_check_radius)"/>
+        <param name="no_target_retry_limit" value="$(arg no_target_retry_limit)"/>
+        <param name="no_target_retry_sleep" value="$(arg no_target_retry_sleep)"/>
         <param name="dwell_time" value="$(arg dwell_time)"/>
         <param name="waypoint_timeout" value="$(arg waypoint_timeout)"/>
     </node>

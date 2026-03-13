@@ -57,6 +57,8 @@ class CoveragePlanner(object):
         self.pose_stale_timeout = rospy.get_param('~pose_stale_timeout', 0.75)
         self.costmap_stale_timeout = rospy.get_param('~costmap_stale_timeout', 2.0)
         self.make_plan_tolerance = rospy.get_param('~make_plan_tolerance', 0.25)
+        self.no_target_retry_limit = int(rospy.get_param('~no_target_retry_limit', 8))
+        self.no_target_retry_sleep = rospy.get_param('~no_target_retry_sleep', 1.5)
 
         # Coverage target safety
         self.target_cost_threshold = int(rospy.get_param('~target_cost_threshold', 85))
@@ -69,6 +71,9 @@ class CoveragePlanner(object):
         self.targets = []
         self.target_lookup = {}
         self.next_target_id = 0
+        self.sweep_target_ids = []
+        self.sweep_cursor = 0
+        self.sequence_initialized = False
         self.latest_costmap = None
         self.latest_costmap_stamp = None
         self.last_selected_row = None
@@ -158,14 +163,16 @@ class CoveragePlanner(object):
             return None
         return abs((rospy.Time.now() - self.latest_costmap_stamp).to_sec())
 
+    def costmap_is_fresh(self):
+        costmap_age = self.get_costmap_age()
+        return costmap_age is not None and costmap_age <= self.costmap_stale_timeout
+
     def wait_for_costmap(self, timeout):
         deadline = rospy.Time.now() + rospy.Duration(timeout)
         rate = rospy.Rate(10)
         while rospy.Time.now() < deadline and not rospy.is_shutdown():
-            if self.latest_costmap is not None:
-                age = self.get_costmap_age()
-                if age is not None and age <= self.costmap_stale_timeout:
-                    return True
+            if self.latest_costmap is not None and self.costmap_is_fresh():
+                return True
             rate.sleep()
         return False
 
@@ -221,9 +228,6 @@ class CoveragePlanner(object):
     def is_target_safe(self, x, y):
         if self.latest_costmap is None:
             return False
-        costmap_age = self.get_costmap_age()
-        if costmap_age is None or costmap_age > self.costmap_stale_timeout:
-            return False
 
         center = self.world_to_costmap(x, y)
         if center is None:
@@ -232,17 +236,22 @@ class CoveragePlanner(object):
         info = self.latest_costmap.info
         radius_cells = int(math.ceil(self.target_check_radius / info.resolution))
         mx, my = center
+        has_known_cells = False
 
         for cx in range(mx - radius_cells, mx + radius_cells + 1):
             for cy in range(my - radius_cells, my + radius_cells + 1):
                 cost = self.costmap_cell(cx, cy)
-                if cost is None or cost < 0:
+                if cost is None:
                     return False
+                if cost < 0:
+                    continue
+                has_known_cells = True
                 if cost >= self.target_cost_threshold:
                     return False
-        return True
+        return has_known_cells
 
     def refresh_targets_from_costmap(self):
+        previous_known = len(self.targets)
         previous_total = self.count_total_targets()
         previous_pending = self.count_pending_targets()
 
@@ -276,8 +285,6 @@ class CoveragePlanner(object):
                 target = self.target_lookup.get(key)
 
                 if target is None:
-                    if not currently_safe:
-                        continue
                     target = CoverageTarget(self.next_target_id, x, y, row_index, col_index)
                     self.next_target_id += 1
                     self.target_lookup[key] = target
@@ -287,6 +294,8 @@ class CoveragePlanner(object):
                 target.currently_safe = currently_safe
 
         self.targets = sorted(self.target_lookup.values(), key=lambda target: (target.row, target.col))
+        if len(self.targets) != previous_known:
+            self.sequence_initialized = False
 
         current_total = self.count_total_targets()
         current_pending = self.count_pending_targets()
@@ -319,6 +328,66 @@ class CoveragePlanner(object):
 
     def count_skipped_targets(self):
         return len([target for target in self.targets if target.skipped])
+
+    def build_sweep_target_ids(self):
+        sequence = []
+        rows = sorted({target.row for target in self.targets})
+        for row in rows:
+            row_targets = [target for target in self.targets if target.row == row]
+            row_targets.sort(key=lambda target: target.col, reverse=bool(row % 2))
+            sequence.extend([target.target_id for target in row_targets])
+        self.sweep_target_ids = sequence
+
+    def initialize_sweep_sequence(self):
+        self.build_sweep_target_ids()
+        self.sequence_initialized = True
+        self.sweep_cursor = 0
+
+        if not self.sweep_target_ids:
+            return
+
+        pose = self.get_robot_pose()
+        if pose is None:
+            return
+
+        best_index = 0
+        best_distance = None
+        for index, target_id in enumerate(self.sweep_target_ids):
+            target = next((candidate for candidate in self.targets if candidate.target_id == target_id), None)
+            if target is None or target.covered or target.skipped:
+                continue
+            distance = math.sqrt((target.x - pose[0]) ** 2 + (target.y - pose[1]) ** 2)
+            if best_distance is None or distance < best_distance:
+                best_distance = distance
+                best_index = index
+        self.sweep_cursor = best_index
+
+    def ordered_pending_targets(self):
+        if not self.sequence_initialized:
+            self.initialize_sweep_sequence()
+
+        if not self.sweep_target_ids:
+            return []
+
+        target_by_id = {target.target_id: target for target in self.targets}
+        ordered = []
+        total = len(self.sweep_target_ids)
+        for offset in range(total):
+            index = (self.sweep_cursor + offset) % total
+            target = target_by_id.get(self.sweep_target_ids[index])
+            if target is None or target.covered or target.skipped:
+                continue
+            ordered.append(target)
+        return ordered
+
+    def advance_sweep_cursor(self, target):
+        if not self.sweep_target_ids:
+            return
+        try:
+            index = self.sweep_target_ids.index(target.target_id)
+        except ValueError:
+            return
+        self.sweep_cursor = (index + 1) % len(self.sweep_target_ids)
 
     def publish_total_points(self):
         self.total_points_pub.publish(Int32(data=self.count_total_targets()))
@@ -369,6 +438,9 @@ class CoveragePlanner(object):
 
     def choose_next_target_once(self):
         self.refresh_targets_from_costmap()
+        if not self.costmap_is_fresh():
+            rospy.logwarn("Global costmap is stale while selecting the next coverage target")
+            return None
 
         pose = self.get_robot_pose()
         if pose is None or pose[3] > self.pose_stale_timeout:
@@ -379,15 +451,17 @@ class CoveragePlanner(object):
         best_target = None
         best_score = None
 
-        pending = [
-            target for target in self.targets
-            if not target.covered and not target.skipped and target.currently_safe
-        ]
-        pending.sort(key=lambda target: math.sqrt((target.x - pose[0]) ** 2 + (target.y - pose[1]) ** 2))
-        fallback_target = pending[0] if pending else None
+        pending = self.ordered_pending_targets()
+        fallback_target = None
         planned_candidate_count = 0
 
         for target in pending:
+            if not target.currently_safe:
+                continue
+
+            if fallback_target is None:
+                fallback_target = target
+
             plan_length = self.plan_length_to_target(start_pose, target)
             if plan_length is None:
                 continue
@@ -407,8 +481,7 @@ class CoveragePlanner(object):
 
         if fallback_target is not None:
             rospy.logwarn(
-                "make_plan found no path for %d safe targets; falling back to nearest safe target %d at (%.2f, %.2f)",
-                len(pending),
+                "make_plan found no path for ordered safe targets; falling back to sweep target %d at (%.2f, %.2f)",
                 fallback_target.target_id,
                 fallback_target.x,
                 fallback_target.y,
@@ -447,13 +520,17 @@ class CoveragePlanner(object):
             rospy.logwarn("Robot pose is stale before goal dispatch")
             return False
 
-        if not target.currently_safe or not self.is_target_safe(target.x, target.y):
-            rospy.logwarn("Target %d at (%.2f, %.2f) is no longer safe before dispatch",
-                          target.target_id, target.x, target.y)
-            target.currently_safe = False
+        if not self.costmap_is_fresh():
+            rospy.logwarn("Global costmap is stale before goal dispatch")
             return False
 
-        goal_yaw = math.atan2(target.y - pose[1], target.x - pose[0])
+        target.currently_safe = self.is_target_safe(target.x, target.y)
+        if not target.currently_safe:
+            rospy.logwarn("Target %d at (%.2f, %.2f) is no longer safe before dispatch",
+                          target.target_id, target.x, target.y)
+            return False
+
+        goal_yaw = pose[2]
 
         goal = MoveBaseGoal()
         goal.target_pose.header.frame_id = 'odom'
@@ -527,6 +604,8 @@ class CoveragePlanner(object):
             self.complete_mission()
             return
 
+        no_target_retries = 0
+
         while not rospy.is_shutdown():
             self.refresh_targets_from_costmap()
             self.publish_total_points()
@@ -537,7 +616,27 @@ class CoveragePlanner(object):
 
             target = self.choose_next_target()
             if target is None:
-                rospy.logwarn("No remaining reachable coverage targets; ending mission")
+                pending_count = self.count_pending_targets()
+                active_count = self.count_active_targets()
+                if pending_count > 0 and no_target_retries < self.no_target_retry_limit:
+                    no_target_retries += 1
+                    rospy.logwarn(
+                        "No selectable target right now (pending=%d active=%d). Waiting %.1fs for costmap/planner recovery before retry %d/%d",
+                        pending_count,
+                        active_count,
+                        self.no_target_retry_sleep,
+                        no_target_retries,
+                        self.no_target_retry_limit,
+                    )
+                    rospy.sleep(self.no_target_retry_sleep)
+                    continue
+
+                rospy.logwarn(
+                    "No remaining reachable coverage targets; ending mission after %d retries (pending=%d active=%d)",
+                    no_target_retries,
+                    pending_count,
+                    active_count,
+                )
                 for pending in self.targets:
                     if not pending.covered and not pending.skipped:
                         pending.skipped = True
@@ -545,9 +644,11 @@ class CoveragePlanner(object):
                 self.publish_progress()
                 break
 
+            no_target_retries = 0
             rospy.loginfo("Selected target %d at (%.2f, %.2f) row=%d col=%d failures=%d",
                           target.target_id, target.x, target.y,
                           target.row, target.col, target.failures)
+            self.advance_sweep_cursor(target)
 
             success = self.send_move_base_goal(target)
             if success:
