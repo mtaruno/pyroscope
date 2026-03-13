@@ -1,77 +1,137 @@
 <launch>
-    <!-- Coverage planner arguments (can be passed from backend or command line) -->
-    <arg name="area_width" default="10.0"/>
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         Coverage planner arguments — override on the command line, e.g.:
+           roslaunch pyroscope_navigation coverage_mission_nav.launch \
+             area_width:=15.0 row_spacing:=0.3 dwell_time:=5.0
+         See COVERAGE_TUNING.md for a full description of every parameter.
+         ═══════════════════════════════════════════════════════════════════════ -->
+
+    <!-- ── Mission geometry ─────────────────────────────────────────────────── -->
+    <!-- Total size of the survey rectangle (metres) -->
+    <arg name="area_width"  default="10.0"/>
     <arg name="area_height" default="10.0"/>
-    <arg name="row_spacing" default="0.5"/>
-    <arg name="waypoint_spacing" default="0.5"/>
+    <!-- row_spacing: distance between adjacent sweep rows (m).
+         Smaller = denser coverage; more waypoints, longer mission. -->
+    <arg name="row_spacing"       default="0.5"/>
+    <!-- waypoint_spacing: distance between waypoints along a row (m). -->
+    <arg name="waypoint_spacing"  default="0.5"/>
+    <!-- origin_x / origin_y: centre of the survey area in the odom frame (m). -->
     <arg name="origin_x" default="0.0"/>
     <arg name="origin_y" default="0.0"/>
+    <!-- wall_margin: safety inset from the area boundary before the first/last
+         waypoints are placed (m). Must be ≥ robot half-width + inflation_radius. -->
     <arg name="wall_margin" default="0.45"/>
+
+    <!-- ── Path planning ────────────────────────────────────────────────────── -->
+    <!-- make_plan_tolerance: goal tolerance passed to move_base/make_plan (m).
+         Increase if the global planner often refuses plans near exact targets. -->
     <arg name="make_plan_tolerance" default="0.25"/>
+
+    <!-- ── Target safety / costmap filtering ────────────────────────────────── -->
+    <!-- target_cost_threshold: costmap cost (0–255) above which a target cell
+         is considered occupied and skipped. 253 = just below LETHAL_OBSTACLE.
+         Lower (e.g. 128) for more conservative operation. -->
     <arg name="target_cost_threshold" default="253"/>
+    <!-- target_check_radius: radius (m) around each candidate target sampled
+         to confirm it is obstacle-free. -->
     <arg name="target_check_radius" default="0.05"/>
+    <!-- max_target_failures: consecutive navigation failures before a target is
+         permanently skipped. Increase for transient obstacles. -->
     <arg name="max_target_failures" default="4"/>
+
+    <!-- ── Timing ────────────────────────────────────────────────────────────── -->
+    <!-- progress_log_interval: how often the planner logs progress (s). -->
     <arg name="progress_log_interval" default="2.0"/>
+    <!-- progress_epsilon: minimum distance improvement (m) that counts as
+         progress for the stall detector. -->
     <arg name="progress_epsilon" default="0.05"/>
+    <!-- stall_timeout: seconds without progress before the current target is
+         abandoned. Increase on slow terrain; decrease for faster failure detection. -->
     <arg name="stall_timeout" default="12.0"/>
-    <arg name="no_target_retry_limit" default="8"/>
-    <arg name="no_target_retry_sleep" default="1.5"/>
+    <!-- dwell_time: pause at each waypoint after arrival (s) for sensor capture.
+         Set to 0 to skip pausing. -->
     <arg name="dwell_time" default="3.0"/>
+    <!-- waypoint_timeout: max time to reach one waypoint before recording a
+         failure (s). Increase if the robot navigates around large obstacles. -->
     <arg name="waypoint_timeout" default="60.0"/>
+
+    <!-- ── No-target retry behaviour ─────────────────────────────────────────── -->
+    <!-- no_target_retry_limit: retries before declaring the mission stuck. -->
+    <arg name="no_target_retry_limit" default="8"/>
+    <!-- no_target_retry_sleep: pause between retries (s) — gives the costmap
+         time to clear after the robot moves. -->
+    <arg name="no_target_retry_sleep" default="1.5"/>
 
     <!-- Static transform: base_link -> laser (15cm above base) -->
     <node pkg="tf" type="static_transform_publisher" name="base_to_laser_tf"
           args="0 0 0.15 0 0 0 base_link laser 100"/>
 
-    <!-- move_base with mapless rolling-window costmaps and DWA planner -->
+    <!-- ═══════════════════════════════════════════════════════════════════════
+         move_base — mapless rolling-window costmaps + DWA local planner.
+         Core timing/patience params are set inline below; costmap and DWA
+         params live in config/*.yaml (see COVERAGE_TUNING.md).
+         ═══════════════════════════════════════════════════════════════════════ -->
     <node pkg="move_base" type="move_base" name="move_base" output="screen" required="true">
-        <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
+        <param name="base_local_planner"  value="dwa_local_planner/DWAPlannerROS"/>
         <param name="base_global_planner" value="navfn/NavfnROS"/>
 
-        <!-- Global planner: allow planning through unknown space (no static map) -->
-        <param name="NavfnROS/allow_unknown" value="true"/>
-        <param name="NavfnROS/default_tolerance" value="0.5"/>
+        <!-- allow_unknown MUST stay true — required for mapless (no static map) operation.
+             Setting it false prevents NavFn from planning through unexplored space. -->
+        <param name="NavfnROS/allow_unknown"       value="true"/>
+        <!-- default_tolerance: global planner goal tolerance (m). Increase if
+             NavFn repeatedly fails to find plans to exact goal positions. -->
+        <param name="NavfnROS/default_tolerance"   value="0.5"/>
 
         <!-- Load costmap configs -->
         <rosparam file="$(find pyroscope_navigation)/config/costmap_common.yaml" command="load" ns="global_costmap"/>
         <rosparam file="$(find pyroscope_navigation)/config/costmap_common.yaml" command="load" ns="local_costmap"/>
         <rosparam file="$(find pyroscope_navigation)/config/global_costmap.yaml" command="load"/>
-        <rosparam file="$(find pyroscope_navigation)/config/local_costmap.yaml" command="load"/>
-        <rosparam file="$(find pyroscope_navigation)/config/dwa_planner.yaml" command="load"/>
+        <rosparam file="$(find pyroscope_navigation)/config/local_costmap.yaml"  command="load"/>
+        <rosparam file="$(find pyroscope_navigation)/config/dwa_planner.yaml"    command="load"/>
 
-        <!-- Planner frequency -->
-        <param name="planner_frequency" value="1.0"/>
+        <!-- planner_frequency: how often to recompute the global plan (Hz).
+             Increase for faster reaction to new obstacles; higher CPU cost. -->
+        <param name="planner_frequency"    value="1.0"/>
+        <!-- controller_frequency: how often to compute velocity commands (Hz).
+             Must be ≤ local_costmap/update_frequency (5 Hz). -->
         <param name="controller_frequency" value="5.0"/>
-        <param name="planner_patience" value="8.0"/>
-        <param name="controller_patience" value="8.0"/>
-        <param name="oscillation_timeout" value="30.0"/>
+        <!-- planner_patience / controller_patience: seconds before move_base
+             triggers a recovery behaviour when stuck. -->
+        <param name="planner_patience"     value="8.0"/>
+        <param name="controller_patience"  value="8.0"/>
+        <!-- oscillation_timeout / oscillation_distance: if the robot oscillates
+             (moves < oscillation_distance in oscillation_timeout seconds) a
+             recovery behaviour fires. -->
+        <param name="oscillation_timeout"  value="30.0"/>
         <param name="oscillation_distance" value="0.15"/>
-        <param name="recovery_behavior_enabled" value="false"/>
-
-        <!-- Recovery behaviors -->
-        <param name="clearing_rotation_allowed" value="false"/>
+        <!-- Disable recovery for deterministic outdoor behaviour.
+             Set to true if the robot frequently gets hard-stuck. -->
+        <param name="recovery_behavior_enabled"  value="false"/>
+        <param name="clearing_rotation_allowed"  value="false"/>
+        <!-- conservative_reset_dist: radius (m) cleared around robot during a
+             conservative-reset recovery. -->
         <param name="conservative_reset_dist" value="0.50"/>
     </node>
 
     <!-- Coverage planner (costmap-aware target selection via move_base) -->
     <node pkg="pyroscope_navigation" type="coverage_planner.py" name="coverage_planner" output="screen">
-        <param name="area_width" value="$(arg area_width)"/>
-        <param name="area_height" value="$(arg area_height)"/>
-        <param name="row_spacing" value="$(arg row_spacing)"/>
-        <param name="waypoint_spacing" value="$(arg waypoint_spacing)"/>
-        <param name="origin_x" value="$(arg origin_x)"/>
-        <param name="origin_y" value="$(arg origin_y)"/>
-        <param name="wall_margin" value="$(arg wall_margin)"/>
-        <param name="make_plan_tolerance" value="$(arg make_plan_tolerance)"/>
+        <param name="area_width"            value="$(arg area_width)"/>
+        <param name="area_height"           value="$(arg area_height)"/>
+        <param name="row_spacing"           value="$(arg row_spacing)"/>
+        <param name="waypoint_spacing"      value="$(arg waypoint_spacing)"/>
+        <param name="origin_x"             value="$(arg origin_x)"/>
+        <param name="origin_y"             value="$(arg origin_y)"/>
+        <param name="wall_margin"           value="$(arg wall_margin)"/>
+        <param name="make_plan_tolerance"   value="$(arg make_plan_tolerance)"/>
         <param name="target_cost_threshold" value="$(arg target_cost_threshold)"/>
-        <param name="target_check_radius" value="$(arg target_check_radius)"/>
-        <param name="max_target_failures" value="$(arg max_target_failures)"/>
+        <param name="target_check_radius"   value="$(arg target_check_radius)"/>
+        <param name="max_target_failures"   value="$(arg max_target_failures)"/>
         <param name="progress_log_interval" value="$(arg progress_log_interval)"/>
-        <param name="progress_epsilon" value="$(arg progress_epsilon)"/>
-        <param name="stall_timeout" value="$(arg stall_timeout)"/>
+        <param name="progress_epsilon"      value="$(arg progress_epsilon)"/>
+        <param name="stall_timeout"         value="$(arg stall_timeout)"/>
         <param name="no_target_retry_limit" value="$(arg no_target_retry_limit)"/>
         <param name="no_target_retry_sleep" value="$(arg no_target_retry_sleep)"/>
-        <param name="dwell_time" value="$(arg dwell_time)"/>
-        <param name="waypoint_timeout" value="$(arg waypoint_timeout)"/>
+        <param name="dwell_time"            value="$(arg dwell_time)"/>
+        <param name="waypoint_timeout"      value="$(arg waypoint_timeout)"/>
     </node>
 </launch>

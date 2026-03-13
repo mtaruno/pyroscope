@@ -1,27 +1,30 @@
 # Shared costmap parameters for global and local costmaps
 # Tuned for outdoor field operation (larger ranges than indoor transbot_nav)
+# See COVERAGE_TUNING.md for full tuning guidance.
 
-# Robot footprint (Transbot is ~25cm x 20cm)
+# Robot footprint (Transbot is ~25cm x 20cm).
+# Update this polygon if the chassis changes.
 footprint: [[-0.125, -0.10], [-0.125, 0.10], [0.125, 0.10], [0.125, -0.10]]
 
-# Obstacle layer params (must be under obstacle_layer/ so the plugin finds them)
+# Obstacle layer — marks and clears obstacles from LIDAR returns
 obstacle_layer:
   observation_sources: laser_scan
   laser_scan:
     sensor_frame: laser
     data_type: LaserScan
     topic: /scan
-    marking: true
-    clearing: true
-    max_obstacle_height: 0.5
+    marking: true        # mark occupied cells when a return is seen
+    clearing: true       # raytrace through free space to clear stale marks
+    max_obstacle_height: 0.5   # ignore returns above 0.5 m (tall posts, etc.)
     min_obstacle_height: 0.0
-    obstacle_range: 4.0
-    raytrace_range: 5.0
+    obstacle_range: 4.0        # mark obstacles up to 4 m away
+    raytrace_range: 5.0        # clear free space up to 5 m (must be ≥ obstacle_range)
 
-# Inflation layer params
+# Inflation layer — expands each obstacle outward so the robot's centre stays
+# safely away. inflation_radius must be ≥ robot half-width (~0.125 m).
 inflation_layer:
-  inflation_radius: 0.20
-  cost_scaling_factor: 2.0
+  inflation_radius: 0.20        # metres to inflate every obstacle
+  cost_scaling_factor: 2.0      # exponential decay rate; higher = narrower band
 
-# Map resolution
+# Grid resolution shared between global and local costmaps (5 cm per cell)
 resolution: 0.05
