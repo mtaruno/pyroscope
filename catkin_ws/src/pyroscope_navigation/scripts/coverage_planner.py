@@ -62,6 +62,7 @@ class CoveragePlanner(object):
         self.stall_timeout = rospy.get_param('~stall_timeout', 30.0)
         self.no_target_retry_limit = int(rospy.get_param('~no_target_retry_limit', 15))
         self.no_target_retry_sleep = rospy.get_param('~no_target_retry_sleep', 3.0)
+        self.costmap_settle_time = rospy.get_param('~costmap_settle_time', 3.0)
 
         # Coverage target safety
         self.target_cost_threshold = int(rospy.get_param('~target_cost_threshold', 85))
@@ -239,19 +240,17 @@ class CoveragePlanner(object):
         info = self.latest_costmap.info
         radius_cells = int(math.ceil(self.target_check_radius / info.resolution))
         mx, my = center
-        has_known_cells = False
 
         for cx in range(mx - radius_cells, mx + radius_cells + 1):
             for cy in range(my - radius_cells, my + radius_cells + 1):
                 cost = self.costmap_cell(cx, cy)
                 if cost is None:
-                    return False
+                    continue  # neighbour outside costmap grid; skip
                 if cost < 0:
-                    continue
-                has_known_cells = True
+                    continue  # unknown cell; treat as potentially free
                 if cost >= self.target_cost_threshold:
                     return False
-        return has_known_cells
+        return True
 
     def refresh_targets_from_costmap(self):
         previous_known = len(self.targets)
@@ -508,9 +507,10 @@ class CoveragePlanner(object):
 
         if self.clear_costmaps_srv is not None:
             try:
-                rospy.logwarn("No reachable target found; clearing costmaps and retrying once")
+                rospy.logwarn("No reachable target found; clearing costmaps and retrying")
                 self.clear_costmaps_srv()
-                rospy.sleep(1.0)
+                rospy.sleep(2.0)
+                self.refresh_targets_from_costmap()
             except Exception:
                 pass
             return self.choose_next_target_once()
@@ -672,15 +672,22 @@ class CoveragePlanner(object):
             self.complete_pub.publish(Bool(data=True))
             return
 
-        rospy.sleep(1.0)
+        rospy.loginfo("Letting costmap settle for %.1f seconds before generating targets...",
+                      self.costmap_settle_time)
+        rospy.sleep(self.costmap_settle_time)
         self.refresh_targets_from_costmap()
         self.publish_total_points()
         self.publish_progress()
 
         if self.count_known_targets() == 0:
-            rospy.logwarn("No safe coverage targets found inside the requested square")
+            rospy.logwarn("No coverage targets found inside the requested square")
             self.complete_mission()
             return
+
+        active = self.count_active_targets()
+        pending = self.count_pending_targets()
+        rospy.loginfo("Initial target census: total=%d pending=%d active=%d",
+                      self.count_known_targets(), pending, active)
 
         no_target_retries = 0
 

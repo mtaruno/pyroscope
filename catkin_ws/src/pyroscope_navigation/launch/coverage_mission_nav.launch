@@ -46,7 +46,7 @@
         <param name="controller_patience" value="8.0"/>
         <param name="oscillation_timeout" value="30.0"/>
         <param name="oscillation_distance" value="0.15"/>
-        <param name="recovery_behavior_enabled" value="false"/>
+        <param name="recovery_behavior_enabled" value="true"/>
 
         <!-- Recovery behaviors -->
         <param name="clearing_rotation_allowed" value="false"/>
