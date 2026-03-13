@@ -1,39 +1,73 @@
 # DWA local planner — tuned for outdoor field operation
 # Slower speeds, larger tolerances, longer simulation horizon
+# See COVERAGE_TUNING.md for a full description of every parameter.
 
 DWAPlannerROS:
-  # Robot velocity limits (small indoor arena, prioritize control over speed)
+
+  # ── Velocity limits ──────────────────────────────────────────────────────────
+  # max_vel_x: fastest the robot can move forward (m/s). Increase carefully;
+  #            higher speed means less reaction time for obstacle avoidance.
   max_vel_x: 0.25
+  # min_vel_x: slowest forward speed when moving. Prevents the robot stopping
+  #            mid-trajectory in the absence of an explicit stop command.
   min_vel_x: 0.05
-  max_vel_y: 0.0
+  max_vel_y: 0.0           # lateral — keep 0 for differential-drive
   min_vel_y: 0.0
+  # max_vel_theta: max angular (turn) speed in rad/s (~46°/s). Reduce if
+  #               odometry drifts badly during fast turns.
   max_vel_theta: 0.8
-  min_vel_theta: -0.8
-  min_vel_trans: 0.04
+  min_vel_theta: -0.8      # must be negative to allow turning both ways
+  min_vel_trans: 0.04      # absolute minimum translational speed when moving
+
+  # ── Acceleration limits ───────────────────────────────────────────────────────
+  # acc_lim_x: max linear acceleration (m/s²). Lower = gentler starts/stops,
+  #            less wheel slip on loose terrain.
   acc_lim_x: 0.8
-  acc_lim_y: 0.0
+  acc_lim_y: 0.0           # lateral — keep 0
+  # acc_lim_theta: max angular acceleration (rad/s²).
   acc_lim_theta: 1.5
 
-  # Goal tolerances (tight enough for real coverage, still achievable with wheel odom)
+  # ── Goal tolerances ───────────────────────────────────────────────────────────
+  # yaw_goal_tolerance: final heading tolerance (rad, ~17°). Coverage missions
+  #                     rarely require precise final heading — can be relaxed.
   yaw_goal_tolerance: 0.30
+  # xy_goal_tolerance: position tolerance (m). Tighten for precise sampling
+  #                    points; loosen if the robot oscillates around the goal.
   xy_goal_tolerance: 0.15
+  # latch_xy_goal_tolerance: when true, once inside tolerance the robot stops
+  #                          even if it drifts slightly out — prevents backing up.
   latch_xy_goal_tolerance: true
 
-  # Forward simulation
+  # ── Forward simulation ────────────────────────────────────────────────────────
+  # sim_time: how far ahead (seconds) candidate trajectories are simulated.
+  #           Longer = smoother paths; higher CPU cost.
   sim_time: 2.0
+  # sim_granularity: time step inside each simulated trajectory (s). Smaller =
+  #                  finer collision checking; higher CPU cost.
   sim_granularity: 0.05
-  vx_samples: 10
-  vy_samples: 1
-  vtheta_samples: 12
+  vx_samples: 10           # number of forward-velocity candidates evaluated
+  vy_samples: 1            # 1 = correct for non-holonomic robot
+  vtheta_samples: 12       # number of angular-velocity candidates evaluated
 
-  # Trajectory scoring
+  # ── Trajectory scoring weights ────────────────────────────────────────────────
+  # These three are the most impactful DWA tuning knobs.
+  # path_distance_bias: reward for staying near the global plan. Higher = robot
+  #                     tracks the planned path more tightly.
   path_distance_bias: 8.0
+  # goal_distance_bias: reward for moving toward the goal. Higher = robot charges
+  #                     toward goal even if it deviates from the plan.
   goal_distance_bias: 16.0
+  # occdist_scale: penalty for passing near obstacles. Higher = wider berth around
+  #               obstacles (may get stuck in narrow gaps); lower = cuts closer.
   occdist_scale: 0.3
 
-  # Oscillation prevention
+  # ── Oscillation prevention ────────────────────────────────────────────────────
+  # oscillation_reset_dist: robot must travel this far (m) to reset oscillation
+  #                         detection counter.
   oscillation_reset_dist: 0.20
 
-  # Stop before hitting things
-  forward_point_distance: 0.10
+  # ── Collision prevention ──────────────────────────────────────────────────────
+  forward_point_distance: 0.10  # look-ahead distance for collision cost (m)
+  # stop_time_buffer: extra time buffer added to deceleration calculations so
+  #                   the robot is guaranteed to stop before hitting an obstacle.
   stop_time_buffer: 0.25

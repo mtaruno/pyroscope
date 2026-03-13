@@ -1,17 +1,24 @@
 # Global costmap — rolling window, no static map
 # Operates in odom frame for mapless outdoor navigation
+# See COVERAGE_TUNING.md for full tuning guidance.
 
 global_costmap:
-  global_frame: odom
+  global_frame: odom          # odometry frame — no SLAM map required
   robot_base_frame: base_link
+  # update_frequency: how often the costmap is rebuilt from sensor data (Hz).
+  # Increase for faster obstacle updates; trades off against CPU load.
   update_frequency: 4.0
-  publish_frequency: 2.0
+  publish_frequency: 2.0      # publication rate for rviz / consumers
+  # transform_tolerance: max TF data age before the costmap raises a TF error.
   transform_tolerance: 3.0
-  static_map: false
-  rolling_window: true
+  static_map: false           # no pre-built map — must stay false for mapless operation
+  rolling_window: true        # window follows the robot as it moves
+  # width / height: rolling-window size in metres. Must be large enough for the
+  # global planner to see the next waypoint from the current position.
+  # Increase if global planning regularly fails on longer waypoint gaps.
   width: 15.0
   height: 15.0
-  resolution: 0.05
+  resolution: 0.05            # 5 cm grid cells — matches costmap_common.yaml
 
   plugins:
     - {name: obstacle_layer, type: "costmap_2d::ObstacleLayer"}
