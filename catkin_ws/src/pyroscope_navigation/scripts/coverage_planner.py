@@ -54,19 +54,19 @@ class CoveragePlanner(object):
         # Timing and planning
         self.dwell_time = rospy.get_param('~dwell_time', 3.0)
         self.waypoint_timeout = rospy.get_param('~waypoint_timeout', 60.0)
-        self.pose_stale_timeout = rospy.get_param('~pose_stale_timeout', 0.75)
-        self.costmap_stale_timeout = rospy.get_param('~costmap_stale_timeout', 2.0)
+        self.pose_stale_timeout = rospy.get_param('~pose_stale_timeout', 2.0)
+        self.costmap_stale_timeout = rospy.get_param('~costmap_stale_timeout', 5.0)
         self.make_plan_tolerance = rospy.get_param('~make_plan_tolerance', 0.25)
         self.progress_log_interval = rospy.get_param('~progress_log_interval', 2.0)
         self.progress_epsilon = rospy.get_param('~progress_epsilon', 0.05)
-        self.stall_timeout = rospy.get_param('~stall_timeout', 12.0)
-        self.no_target_retry_limit = int(rospy.get_param('~no_target_retry_limit', 8))
-        self.no_target_retry_sleep = rospy.get_param('~no_target_retry_sleep', 1.5)
+        self.stall_timeout = rospy.get_param('~stall_timeout', 30.0)
+        self.no_target_retry_limit = int(rospy.get_param('~no_target_retry_limit', 15))
+        self.no_target_retry_sleep = rospy.get_param('~no_target_retry_sleep', 3.0)
 
         # Coverage target safety
         self.target_cost_threshold = int(rospy.get_param('~target_cost_threshold', 85))
         self.target_check_radius = rospy.get_param('~target_check_radius', 0.10)
-        self.max_target_failures = int(rospy.get_param('~max_target_failures', 4))
+        self.max_target_failures = int(rospy.get_param('~max_target_failures', 8))
         self.failure_penalty = rospy.get_param('~failure_penalty', 0.75)
         self.row_change_penalty = rospy.get_param('~row_change_penalty', 0.10)
 
