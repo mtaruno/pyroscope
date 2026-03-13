@@ -40,6 +40,7 @@ class CoverageTarget(object):
 class CoveragePlanner(object):
     def __init__(self):
         rospy.init_node('coverage_planner', anonymous=False)
+        self.ready = False
 
         # Mission geometry
         self.area_width = rospy.get_param('~area_width', 10.0)
@@ -55,11 +56,11 @@ class CoveragePlanner(object):
         self.waypoint_timeout = rospy.get_param('~waypoint_timeout', 60.0)
         self.pose_stale_timeout = rospy.get_param('~pose_stale_timeout', 0.75)
         self.costmap_stale_timeout = rospy.get_param('~costmap_stale_timeout', 2.0)
-        self.make_plan_tolerance = rospy.get_param('~make_plan_tolerance', 0.10)
+        self.make_plan_tolerance = rospy.get_param('~make_plan_tolerance', 0.25)
 
         # Coverage target safety
-        self.target_cost_threshold = int(rospy.get_param('~target_cost_threshold', 40))
-        self.target_check_radius = rospy.get_param('~target_check_radius', 0.16)
+        self.target_cost_threshold = int(rospy.get_param('~target_cost_threshold', 85))
+        self.target_check_radius = rospy.get_param('~target_check_radius', 0.10)
         self.max_target_failures = int(rospy.get_param('~max_target_failures', 2))
         self.failure_penalty = rospy.get_param('~failure_penalty', 0.75)
         self.row_change_penalty = rospy.get_param('~row_change_penalty', 0.10)
@@ -97,8 +98,8 @@ class CoveragePlanner(object):
         self.progress_pub.publish(String(data='Waiting for costmap...'))
 
         rospy.loginfo("Waiting for move_base action server...")
-        if not self.move_base_client.wait_for_server(rospy.Duration(30.0)):
-            rospy.logfatal("move_base action server not available -- aborting")
+        if not self.move_base_client.wait_for_server(rospy.Duration(60.0)):
+            rospy.logfatal("move_base action server not available -- inspect move_base startup logs")
             rospy.signal_shutdown("move_base unavailable")
             return
 
@@ -123,6 +124,7 @@ class CoveragePlanner(object):
                       self.row_spacing, self.waypoint_spacing)
         rospy.loginfo("  Safety: wall_margin=%.2f m target_cost_threshold=%d target_check_radius=%.2f m",
                       self.wall_margin, self.target_cost_threshold, self.target_check_radius)
+        self.ready = True
 
     def costmap_callback(self, msg):
         self.latest_costmap = msg
@@ -382,11 +384,14 @@ class CoveragePlanner(object):
             if not target.covered and not target.skipped and target.currently_safe
         ]
         pending.sort(key=lambda target: math.sqrt((target.x - pose[0]) ** 2 + (target.y - pose[1]) ** 2))
+        fallback_target = pending[0] if pending else None
+        planned_candidate_count = 0
 
         for target in pending:
             plan_length = self.plan_length_to_target(start_pose, target)
             if plan_length is None:
                 continue
+            planned_candidate_count += 1
 
             row_penalty = 0.0
             if self.last_selected_row is not None and target.row != self.last_selected_row:
@@ -396,6 +401,27 @@ class CoveragePlanner(object):
             if best_score is None or score < best_score:
                 best_score = score
                 best_target = target
+
+        if best_target is not None:
+            return best_target
+
+        if fallback_target is not None:
+            rospy.logwarn(
+                "make_plan found no path for %d safe targets; falling back to nearest safe target %d at (%.2f, %.2f)",
+                len(pending),
+                fallback_target.target_id,
+                fallback_target.x,
+                fallback_target.y,
+            )
+            return fallback_target
+
+        if self.count_pending_targets() > 0:
+            rospy.logwarn(
+                "No active safe targets remain in the live costmap (pending=%d active=%d planned=%d)",
+                self.count_pending_targets(),
+                self.count_active_targets(),
+                planned_candidate_count,
+            )
 
         return best_target
 
@@ -476,6 +502,9 @@ class CoveragePlanner(object):
         rospy.sleep(1.0)
 
     def run(self):
+        if not self.ready or rospy.is_shutdown():
+            return
+
         rospy.loginfo("Waiting for a fresh robot pose...")
         if not self.wait_for_fresh_pose(10.0):
             rospy.logfatal("No fresh robot pose available; aborting coverage mission")

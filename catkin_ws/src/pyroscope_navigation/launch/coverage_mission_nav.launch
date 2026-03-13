@@ -7,6 +7,9 @@
     <arg name="origin_x" default="0.0"/>
     <arg name="origin_y" default="0.0"/>
     <arg name="wall_margin" default="0.30"/>
+    <arg name="make_plan_tolerance" default="0.25"/>
+    <arg name="target_cost_threshold" default="85"/>
+    <arg name="target_check_radius" default="0.10"/>
     <arg name="dwell_time" default="3.0"/>
     <arg name="waypoint_timeout" default="60.0"/>
 
@@ -15,7 +18,7 @@
           args="0 0 0.15 0 0 0 base_link laser 100"/>
 
     <!-- move_base with mapless rolling-window costmaps and DWA planner -->
-    <node pkg="move_base" type="move_base" name="move_base" output="screen">
+    <node pkg="move_base" type="move_base" name="move_base" output="screen" required="true">
         <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
         <param name="base_global_planner" value="navfn/NavfnROS"/>
 
@@ -53,6 +56,9 @@
         <param name="origin_x" value="$(arg origin_x)"/>
         <param name="origin_y" value="$(arg origin_y)"/>
         <param name="wall_margin" value="$(arg wall_margin)"/>
+        <param name="make_plan_tolerance" value="$(arg make_plan_tolerance)"/>
+        <param name="target_cost_threshold" value="$(arg target_cost_threshold)"/>
+        <param name="target_check_radius" value="$(arg target_check_radius)"/>
         <param name="dwell_time" value="$(arg dwell_time)"/>
         <param name="waypoint_timeout" value="$(arg waypoint_timeout)"/>
     </node>
