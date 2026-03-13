@@ -62,6 +62,7 @@ class CoveragePlanner(object):
         self.stall_timeout = rospy.get_param('~stall_timeout', 30.0)
         self.no_target_retry_limit = int(rospy.get_param('~no_target_retry_limit', 15))
         self.no_target_retry_sleep = rospy.get_param('~no_target_retry_sleep', 3.0)
+        self.costmap_settle_time = rospy.get_param('~costmap_settle_time', 3.0)
 
         # Coverage target safety
         self.target_cost_threshold = int(rospy.get_param('~target_cost_threshold', 85))
@@ -671,8 +672,9 @@ class CoveragePlanner(object):
             self.complete_pub.publish(Bool(data=True))
             return
 
-        rospy.loginfo("Letting costmap settle for 3 seconds before generating targets...")
-        rospy.sleep(3.0)
+        rospy.loginfo("Letting costmap settle for %.1f seconds before generating targets...",
+                      self.costmap_settle_time)
+        rospy.sleep(self.costmap_settle_time)
         self.refresh_targets_from_costmap()
         self.publish_total_points()
         self.publish_progress()

@@ -23,7 +23,7 @@ _rospy.ROSException = type('ROSException', (Exception,), {})
 
 
 class _FakeTime(object):
-    def __init__(self, secs=0, nsecs=0):
+    def __init__(self, secs=0):
         self._secs = secs
 
     def to_sec(self):
@@ -46,7 +46,7 @@ class _FakeTime(object):
 
 
 class _FakeDuration(object):
-    def __init__(self, secs=0, nsecs=0):
+    def __init__(self, secs=0):
         self._secs = secs
 
     def to_sec(self):
