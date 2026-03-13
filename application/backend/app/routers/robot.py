@@ -68,7 +68,7 @@ class MissionConfig(BaseModel):
     sampling_precision_m: float = 5.0
     area_width: Optional[float] = None
     area_height: Optional[float] = None
-    row_spacing: float = 0.8
+    row_spacing: float = 0.5
     waypoint_spacing: float = 0.5
     origin_x: float = 0.0
     origin_y: float = 0.0
@@ -78,7 +78,7 @@ class MissionConfig(BaseModel):
 
 def _calc_total_waypoints(area_width: float, area_height: float,
                           row_spacing: float, waypoint_spacing: float,
-                          wall_margin: float = 0.20) -> int:
+                          wall_margin: float = 0.30) -> int:
     """Match the coverage_planner.py waypoint generation logic (centered grid)."""
     import math
     ew = area_width - 2 * wall_margin  # centered: same effective width
@@ -246,6 +246,18 @@ async def get_mission_status():
             "total_points": progress["total_points"],
             "progress_percent": progress["progress_percent"],
             "message": "No mission has been started",
+        }
+
+    if active_scan_id and progress.get("status") == "completed":
+        return {
+            "status": "completed",
+            "running": False,
+            "pid": mission_process.pid if mission_process and mission_process.poll() is None else None,
+            "scan_id": active_scan_id,
+            "captured_points": progress["captured_points"],
+            "total_points": progress["total_points"],
+            "progress_percent": progress["progress_percent"],
+            "message": "Mission completed",
         }
 
     if active_scan_id and progress.get("status") == "running":

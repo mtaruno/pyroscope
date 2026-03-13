@@ -7,7 +7,7 @@ const SCAN_SECONDS_PER_SQUARE_METER = 5
 const SCAN_SECONDS_PER_POINT = 8
 const FUEL_ESTIMATE_SECONDS_PER_POINT = 60
 
-const WALL_MARGIN = 0.20
+const WALL_MARGIN = 0.30
 
 function calcTotalPoints(areaSize, precision, rowSpacing) {
   const ew = areaSize - 2 * WALL_MARGIN
@@ -32,7 +32,7 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
   const [precision, setPrecision] = useState(0.5)
   const [originX, setOriginX] = useState(0)
   const [originY, setOriginY] = useState(0)
-  const [rowSpacing, setRowSpacing] = useState(0.8)
+  const [rowSpacing, setRowSpacing] = useState(0.5)
   const [dwellTime, setDwellTime] = useState(2.0)
   const [waypointTimeout, setWaypointTimeout] = useState(30.0)
 
@@ -86,7 +86,7 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
         </div>
 
         <div className="scan-config-group">
-          <p className="scan-config-label">Origin (robot start position in meters)</p>
+          <p className="scan-config-label">Area Center in Odom (meters)</p>
           <div className="scan-config-inputs">
             <label className="scan-config-input-label">
               X
@@ -121,7 +121,7 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
                 step="0.1"
                 min="0.1"
                 value={rowSpacing}
-                onChange={(e) => setRowSpacing(parseFloat(e.target.value) || 0.8)}
+                onChange={(e) => setRowSpacing(parseFloat(e.target.value) || 0.5)}
                 className="scan-config-input"
               />
             </label>

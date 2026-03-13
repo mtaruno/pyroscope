@@ -24,8 +24,10 @@ from app.services.ros_sensor_bridge import (
     is_ros_configured,
     start_ros_bridge,
     get_latest_from_ros,
+    get_coverage_state,
     wait_for_next_capture_ready,
     clear_capture_ready_queue,
+    clear_coverage_state,
     save_live_rgb_to_file,
     save_live_thermal_to_file,
 )
@@ -112,6 +114,15 @@ def _mark_scan_completed(scan_id: int) -> None:
         db.close()
 
 
+def _sync_total_points_from_ros() -> Optional[int]:
+    metrics = get_coverage_state()
+    total_points = metrics.get("total_points")
+    if total_points is not None:
+        with _capture_state_lock:
+            _capture_state["total_points"] = int(total_points)
+    return total_points
+
+
 def _capture_loop_impl(scan_id: int):
     stop_event = _capture_state["stop_event"]
     if not stop_event:
@@ -128,6 +139,18 @@ def _capture_loop_impl(scan_id: int):
     simulate = not use_ros and not _sht40_script.exists()
 
     while not stop_event.is_set():
+        if use_ros:
+            total_points = _sync_total_points_from_ros()
+            coverage_state = get_coverage_state()
+            with _capture_state_lock:
+                captured_points = int(_capture_state.get("captured_points") or 0)
+            if coverage_state.get("complete") and total_points is not None and captured_points >= int(total_points):
+                with _capture_state_lock:
+                    _capture_state["status"] = "completed"
+                _mark_scan_completed(scan_id)
+                stop_event.set()
+                break
+
         capture_ready = wait_for_next_capture_ready(timeout_sec=0.5) if use_ros else False
         if stop_event.is_set():
             break
@@ -221,8 +244,11 @@ def _capture_loop_impl(scan_id: int):
         finally:
             db.close()
 
+        ros_total_points = _sync_total_points_from_ros() if use_ros else None
         with _capture_state_lock:
             _capture_state["captured_points"] = sequence_index + 1
+            if ros_total_points is not None:
+                _capture_state["total_points"] = int(ros_total_points)
             total_points = _capture_state["total_points"]
         sequence_index += 1
         if total_points and sequence_index >= total_points:
@@ -251,6 +277,7 @@ def start_capture_loop(scan_id: int, total_points: Optional[int] = None) -> None
     os.makedirs(rgb_dir, exist_ok=True)
     use_ros = is_ros_configured() and start_ros_bridge(thermal_dir, rgb_dir)
     clear_capture_ready_queue()
+    clear_coverage_state()
     logger.warning("Starting capture loop: scan_id=%d, total_points=%s, use_ros=%s", scan_id, total_points, use_ros)
     _capture_state["use_ros"] = use_ros
     _capture_state["stop_event"] = threading.Event()
@@ -295,6 +322,10 @@ def get_capture_progress() -> dict:
         total_points = _capture_state.get("total_points")
         status = _capture_state.get("status") or "idle"
         last_capture_ready = _capture_state.get("last_capture_ready")
+        use_ros = bool(_capture_state.get("use_ros"))
+    ros_total_points = get_coverage_state().get("total_points") if use_ros else None
+    if ros_total_points is not None:
+        total_points = int(ros_total_points)
     progress_percent = 0.0
     if total_points and total_points > 0:
         progress_percent = min(100.0, (captured_points / total_points) * 100.0)

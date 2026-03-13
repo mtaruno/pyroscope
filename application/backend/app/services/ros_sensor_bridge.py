@@ -38,6 +38,8 @@ _ros_cache: Dict[str, Any] = {
     "rgb_image_path": None,        # kept for waypoint capture compatibility
     "voltage": None,
     "battery_percent": None,
+    "coverage_total_points": None,
+    "coverage_complete": False,
     "capture_ready_queue": [],
     "lock": threading.Lock(),
     "capture_ready_condition": threading.Condition(),
@@ -97,7 +99,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
     """Run rospy node and subscribe to sensor topics; update _ros_cache."""
     try:
         import rospy
-        from std_msgs.msg import Float64, Float32, Bool
+        from std_msgs.msg import Float64, Float32, Bool, Int32
         from sensor_msgs.msg import Image
     except ImportError as e:
         logger.warning("rospy not available, ROS sensor bridge disabled: %s", e)
@@ -233,6 +235,14 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
             _ros_cache["capture_ready_queue"].append(True)
             _ros_cache["capture_ready_condition"].notify_all()
 
+    def cb_coverage_total(msg):
+        with _ros_cache["lock"]:
+            _ros_cache["coverage_total_points"] = int(msg.data)
+
+    def cb_coverage_complete(msg):
+        with _ros_cache["lock"]:
+            _ros_cache["coverage_complete"] = bool(msg.data)
+
     def _set_voltage(voltage_value):
         with _ros_cache["lock"]:
             _ros_cache["voltage"] = voltage_value
@@ -260,6 +270,8 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
     rospy.Subscriber("/sensors/sht40/humidity", Float64, cb_hum, queue_size=1)
     rospy.Subscriber("/sensors/thermal/mean", Float64, cb_thermal_mean, queue_size=1)
     rospy.Subscriber("/coverage/capture_ready", Bool, cb_capture_ready, queue_size=50)
+    rospy.Subscriber("/coverage/total_points", Int32, cb_coverage_total, queue_size=10)
+    rospy.Subscriber("/coverage/complete", Bool, cb_coverage_complete, queue_size=10)
     topic_types = {}
     try:
         topic_types = {name: t for name, t in rospy.get_published_topics()}
@@ -326,7 +338,23 @@ def get_latest_from_ros() -> Dict[str, Any]:
             "rgb_image_path": _ros_cache["rgb_image_path"],
             "voltage": _ros_cache["voltage"],
             "battery_percent": _ros_cache["battery_percent"],
+            "coverage_total_points": _ros_cache["coverage_total_points"],
+            "coverage_complete": bool(_ros_cache["coverage_complete"]),
         }
+
+
+def get_coverage_state() -> Dict[str, Any]:
+    with _ros_cache["lock"]:
+        return {
+            "total_points": _ros_cache["coverage_total_points"],
+            "complete": bool(_ros_cache["coverage_complete"]),
+        }
+
+
+def clear_coverage_state() -> None:
+    with _ros_cache["lock"]:
+        _ros_cache["coverage_total_points"] = None
+        _ros_cache["coverage_complete"] = False
 
 
 def wait_for_next_capture_ready(timeout_sec: float = 0.5) -> bool:

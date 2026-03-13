@@ -190,6 +190,11 @@ function App() {
 
         if (progress?.status === 'completed' && !finishHandledRef.current) {
           finishHandledRef.current = true
+          try {
+            await apiClient.stopCoverageMission()
+          } catch (stopError) {
+            console.error('Failed to stop completed mission cleanly:', stopError)
+          }
           setIsScanning(false)
           setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
           setScanPhase('Scan complete')
@@ -275,7 +280,7 @@ function App() {
 
   const handleConfirmStartScan = async ({
     areaSize, precision, totalPoints: configuredTotal,
-    originX = 0, originY = 0, rowSpacing = 0.8, dwellTime = 2.0, waypointTimeout = 30.0
+    originX = 0, originY = 0, rowSpacing = 0.5, dwellTime = 2.0, waypointTimeout = 30.0
   }) => {
     setShowScanConfigModal(false)
     try {
@@ -506,4 +511,3 @@ function App() {
 }
 
 export default App
-

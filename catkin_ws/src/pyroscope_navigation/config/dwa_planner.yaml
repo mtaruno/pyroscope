@@ -2,37 +2,38 @@
 # Slower speeds, larger tolerances, longer simulation horizon
 
 DWAPlannerROS:
-  # Robot velocity limits (conservative for uneven terrain)
-  max_vel_x: 0.45
-  min_vel_x: -0.10
+  # Robot velocity limits (small indoor arena, prioritize control over speed)
+  max_vel_x: 0.25
+  min_vel_x: 0.0
   max_vel_y: 0.0
   min_vel_y: 0.0
-  max_vel_theta: 1.2
-  min_vel_theta: -1.2
-  min_vel_trans: 0.08
-  acc_lim_x: 1.5
+  max_vel_theta: 0.8
+  min_vel_theta: -0.8
+  min_vel_trans: 0.04
+  acc_lim_x: 0.8
   acc_lim_y: 0.0
-  acc_lim_theta: 3.0
+  acc_lim_theta: 1.5
 
-  # Goal tolerances (relaxed for outdoor GPS/odom drift)
-  yaw_goal_tolerance: 0.4
-  xy_goal_tolerance: 0.40
+  # Goal tolerances (tight enough for real coverage, still achievable with wheel odom)
+  yaw_goal_tolerance: 0.30
+  xy_goal_tolerance: 0.15
   latch_xy_goal_tolerance: true
 
-  # Forward simulation (longer horizon for outdoor planning)
-  sim_time: 2.0
+  # Forward simulation
+  sim_time: 1.5
   sim_granularity: 0.05
-  vx_samples: 12
+  vx_samples: 8
   vy_samples: 1
-  vtheta_samples: 20
+  vtheta_samples: 24
 
-  # Trajectory scoring -- balance reaching goals vs avoiding walls
-  path_distance_bias: 20.0
-  goal_distance_bias: 28.0
-  occdist_scale: 0.3
+  # Trajectory scoring -- bias away from obstacles and toward following the global plan
+  path_distance_bias: 24.0
+  goal_distance_bias: 14.0
+  occdist_scale: 0.8
 
   # Oscillation prevention
-  oscillation_reset_dist: 0.10
+  oscillation_reset_dist: 0.20
 
   # Stop before hitting things
-  forward_point_distance: 0.15
+  forward_point_distance: 0.10
+  stop_time_buffer: 0.25
