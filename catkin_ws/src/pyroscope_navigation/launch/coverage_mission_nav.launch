@@ -10,6 +10,10 @@
     <arg name="make_plan_tolerance" default="0.25"/>
     <arg name="target_cost_threshold" default="85"/>
     <arg name="target_check_radius" default="0.10"/>
+    <arg name="max_target_failures" default="4"/>
+    <arg name="progress_log_interval" default="2.0"/>
+    <arg name="progress_epsilon" default="0.05"/>
+    <arg name="stall_timeout" default="12.0"/>
     <arg name="no_target_retry_limit" default="8"/>
     <arg name="no_target_retry_sleep" default="1.5"/>
     <arg name="dwell_time" default="3.0"/>
@@ -38,15 +42,15 @@
         <!-- Planner frequency -->
         <param name="planner_frequency" value="1.0"/>
         <param name="controller_frequency" value="5.0"/>
-        <param name="planner_patience" value="3.0"/>
-        <param name="controller_patience" value="3.0"/>
-        <param name="oscillation_timeout" value="4.0"/>
-        <param name="oscillation_distance" value="0.15"/>
-        <param name="recovery_behavior_enabled" value="true"/>
+        <param name="planner_patience" value="8.0"/>
+        <param name="controller_patience" value="8.0"/>
+        <param name="oscillation_timeout" value="12.0"/>
+        <param name="oscillation_distance" value="0.30"/>
+        <param name="recovery_behavior_enabled" value="false"/>
 
         <!-- Recovery behaviors -->
-        <param name="clearing_rotation_allowed" value="true"/>
-        <param name="conservative_reset_dist" value="1.5"/>
+        <param name="clearing_rotation_allowed" value="false"/>
+        <param name="conservative_reset_dist" value="0.50"/>
     </node>
 
     <!-- Coverage planner (costmap-aware target selection via move_base) -->
@@ -61,6 +65,10 @@
         <param name="make_plan_tolerance" value="$(arg make_plan_tolerance)"/>
         <param name="target_cost_threshold" value="$(arg target_cost_threshold)"/>
         <param name="target_check_radius" value="$(arg target_check_radius)"/>
+        <param name="max_target_failures" value="$(arg max_target_failures)"/>
+        <param name="progress_log_interval" value="$(arg progress_log_interval)"/>
+        <param name="progress_epsilon" value="$(arg progress_epsilon)"/>
+        <param name="stall_timeout" value="$(arg stall_timeout)"/>
         <param name="no_target_retry_limit" value="$(arg no_target_retry_limit)"/>
         <param name="no_target_retry_sleep" value="$(arg no_target_retry_sleep)"/>
         <param name="dwell_time" value="$(arg dwell_time)"/>

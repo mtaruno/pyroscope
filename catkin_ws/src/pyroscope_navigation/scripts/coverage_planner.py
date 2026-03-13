@@ -57,13 +57,16 @@ class CoveragePlanner(object):
         self.pose_stale_timeout = rospy.get_param('~pose_stale_timeout', 0.75)
         self.costmap_stale_timeout = rospy.get_param('~costmap_stale_timeout', 2.0)
         self.make_plan_tolerance = rospy.get_param('~make_plan_tolerance', 0.25)
+        self.progress_log_interval = rospy.get_param('~progress_log_interval', 2.0)
+        self.progress_epsilon = rospy.get_param('~progress_epsilon', 0.05)
+        self.stall_timeout = rospy.get_param('~stall_timeout', 12.0)
         self.no_target_retry_limit = int(rospy.get_param('~no_target_retry_limit', 8))
         self.no_target_retry_sleep = rospy.get_param('~no_target_retry_sleep', 1.5)
 
         # Coverage target safety
         self.target_cost_threshold = int(rospy.get_param('~target_cost_threshold', 85))
         self.target_check_radius = rospy.get_param('~target_check_radius', 0.10)
-        self.max_target_failures = int(rospy.get_param('~max_target_failures', 2))
+        self.max_target_failures = int(rospy.get_param('~max_target_failures', 4))
         self.failure_penalty = rospy.get_param('~failure_penalty', 0.75)
         self.row_change_penalty = rospy.get_param('~row_change_penalty', 0.10)
 
@@ -545,17 +548,92 @@ class CoveragePlanner(object):
         goal.target_pose.pose.orientation.z = quat[2]
         goal.target_pose.pose.orientation.w = quat[3]
 
-        self.move_base_client.send_goal(goal)
-        finished = self.move_base_client.wait_for_result(rospy.Duration(self.waypoint_timeout))
+        start_distance = math.sqrt((target.x - pose[0]) ** 2 + (target.y - pose[1]) ** 2)
+        best_distance = start_distance
+        start_time = rospy.Time.now()
+        last_progress_time = start_time
+        last_log_time = start_time
 
-        if not finished:
-            self.move_base_client.cancel_goal()
-            rospy.logwarn("move_base timed out reaching target %d at (%.2f, %.2f)",
-                          target.target_id, target.x, target.y)
-            return False
+        self.move_base_client.send_goal(goal)
+        rospy.loginfo(
+            "Tracking target %d at (%.2f, %.2f): start_distance=%.2f m timeout=%.1f s stall_timeout=%.1f s",
+            target.target_id,
+            target.x,
+            target.y,
+            start_distance,
+            self.waypoint_timeout,
+            self.stall_timeout,
+        )
+
+        rate = rospy.Rate(4)
+        while not rospy.is_shutdown():
+            if self.move_base_client.wait_for_result(rospy.Duration(0.0)):
+                break
+
+            now = rospy.Time.now()
+            pose = self.get_robot_pose()
+            if pose is not None and pose[3] <= self.pose_stale_timeout:
+                current_distance = math.sqrt((target.x - pose[0]) ** 2 + (target.y - pose[1]) ** 2)
+                if current_distance < best_distance - self.progress_epsilon:
+                    improvement = best_distance - current_distance
+                    best_distance = current_distance
+                    last_progress_time = now
+                    rospy.loginfo(
+                        "Target %d progress: distance %.2f m (improved %.2f m, elapsed %.1f s)",
+                        target.target_id,
+                        current_distance,
+                        improvement,
+                        (now - start_time).to_sec(),
+                    )
+                elif (now - last_log_time).to_sec() >= self.progress_log_interval:
+                    rospy.loginfo(
+                        "Target %d status: distance %.2f m best %.2f m elapsed %.1f s stalled %.1f s",
+                        target.target_id,
+                        current_distance,
+                        best_distance,
+                        (now - start_time).to_sec(),
+                        (now - last_progress_time).to_sec(),
+                    )
+                    last_log_time = now
+
+            elapsed = (now - start_time).to_sec()
+            stalled = (now - last_progress_time).to_sec()
+            if elapsed >= self.waypoint_timeout:
+                self.move_base_client.cancel_goal()
+                rospy.logwarn(
+                    "move_base timed out reaching target %d at (%.2f, %.2f): best_distance=%.2f m elapsed=%.1f s",
+                    target.target_id,
+                    target.x,
+                    target.y,
+                    best_distance,
+                    elapsed,
+                )
+                return False
+
+            if stalled >= self.stall_timeout:
+                self.move_base_client.cancel_goal()
+                rospy.logwarn(
+                    "move_base stalled on target %d at (%.2f, %.2f): best_distance=%.2f m stalled=%.1f s",
+                    target.target_id,
+                    target.x,
+                    target.y,
+                    best_distance,
+                    stalled,
+                )
+                return False
+
+            rate.sleep()
 
         state = self.move_base_client.get_state()
         if state == actionlib.GoalStatus.SUCCEEDED:
+            rospy.loginfo(
+                "Reached target %d at (%.2f, %.2f): start_distance=%.2f m best_distance=%.2f m",
+                target.target_id,
+                target.x,
+                target.y,
+                start_distance,
+                best_distance,
+            )
             return True
 
         rospy.logwarn("move_base failed for target %d at (%.2f, %.2f) -- state %d",
