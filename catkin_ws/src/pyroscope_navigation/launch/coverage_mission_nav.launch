@@ -8,8 +8,8 @@
     <arg name="origin_y" default="0.0"/>
     <arg name="wall_margin" default="0.45"/>
     <arg name="make_plan_tolerance" default="0.25"/>
-    <arg name="target_cost_threshold" default="85"/>
-    <arg name="target_check_radius" default="0.10"/>
+    <arg name="target_cost_threshold" default="253"/>
+    <arg name="target_check_radius" default="0.05"/>
     <arg name="max_target_failures" default="4"/>
     <arg name="progress_log_interval" default="2.0"/>
     <arg name="progress_epsilon" default="0.05"/>
@@ -46,7 +46,7 @@
         <param name="controller_patience" value="8.0"/>
         <param name="oscillation_timeout" value="30.0"/>
         <param name="oscillation_distance" value="0.15"/>
-        <param name="recovery_behavior_enabled" value="true"/>
+        <param name="recovery_behavior_enabled" value="false"/>
 
         <!-- Recovery behaviors -->
         <param name="clearing_rotation_allowed" value="false"/>
