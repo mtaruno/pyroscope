@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 """
 ROS node: read SHT40 temperature and humidity, publish to /sensors/sht40/temperature and /sensors/sht40/humidity.
 Run on Jetson; add pyroscope repo root to path so sht40_reader can be imported.
