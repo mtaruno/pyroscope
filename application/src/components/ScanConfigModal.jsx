@@ -7,7 +7,7 @@ const SCAN_SECONDS_PER_SQUARE_METER = 5
 const SCAN_SECONDS_PER_POINT = 8
 const FUEL_ESTIMATE_SECONDS_PER_POINT = 60
 
-const WALL_MARGIN = 0.25
+const WALL_MARGIN = 0.30
 
 function calcTotalPoints(areaSize, precision, rowSpacing) {
   const ew = areaSize - 2 * WALL_MARGIN

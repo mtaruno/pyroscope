@@ -20,7 +20,7 @@ from std_msgs.msg import Bool, String
 
 # Margin inset from area boundary so waypoints never land on walls.
 # Must be >= robot half-width (0.125m) + inflation_radius (0.15m).
-WALL_MARGIN = 0.25  # meters - must be > robot_half_width (0.125m) + inflation_radius (0.12m)
+WALL_MARGIN = 0.30  # meters - must be > robot_half_width (0.125m) + inflation_radius (0.12m)
 
 
 class CoveragePlanner:
@@ -383,10 +383,9 @@ class CoveragePlanner:
         self.stop_robot()
 
     def perform_escape_recovery(self):
-        rospy.logwarn("Running escape recovery: cancel goal, clear costmaps, rotate toward open side, then back up")
+        rospy.logwarn("Running escape recovery: cancel goal, rotate toward open side, then back up")
         self.move_base_client.cancel_goal()
         self.stop_robot()
-        self.clear_costmaps()
         rospy.sleep(0.5)
 
         if self.get_scan_age() is None or self.get_scan_age() > self.scan_stale_timeout:
@@ -395,7 +394,6 @@ class CoveragePlanner:
         turn_direction = self.choose_turn_direction()
         self.rotate_for_recovery(turn_direction)
         self.backup_for_recovery()
-        self.clear_costmaps()
         rospy.sleep(1.0)
 
     def send_move_base_goal(self, x, y):

@@ -32,14 +32,14 @@
         <!-- Planner frequency -->
         <param name="planner_frequency" value="1.0"/>
         <param name="controller_frequency" value="5.0"/>
-        <param name="planner_patience" value="3.0"/>
-        <param name="controller_patience" value="3.0"/>
+        <param name="planner_patience" value="8.0"/>
+        <param name="controller_patience" value="8.0"/>
         <param name="oscillation_timeout" value="10.0"/>
         <param name="oscillation_distance" value="0.10"/>
         <param name="recovery_behavior_enabled" value="true"/>
 
         <!-- Recovery behaviors -->
-        <param name="clearing_rotation_allowed" value="true"/>
+        <param name="clearing_rotation_allowed" value="false"/>
         <param name="conservative_reset_dist" value="1.5"/>
     </node>
 
