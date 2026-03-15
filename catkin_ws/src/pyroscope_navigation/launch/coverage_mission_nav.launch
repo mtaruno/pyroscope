@@ -34,8 +34,8 @@
         <param name="controller_frequency" value="5.0"/>
         <param name="planner_patience" value="3.0"/>
         <param name="controller_patience" value="3.0"/>
-        <param name="oscillation_timeout" value="4.0"/>
-        <param name="oscillation_distance" value="0.15"/>
+        <param name="oscillation_timeout" value="10.0"/>
+        <param name="oscillation_distance" value="0.10"/>
         <param name="recovery_behavior_enabled" value="true"/>
 
         <!-- Recovery behaviors -->

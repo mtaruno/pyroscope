@@ -78,7 +78,7 @@ class MissionConfig(BaseModel):
 
 def _calc_total_waypoints(area_width: float, area_height: float,
                           row_spacing: float, waypoint_spacing: float,
-                          wall_margin: float = 0.20) -> int:
+                          wall_margin: float = 0.25) -> int:
     """Match the coverage_planner.py waypoint generation logic (centered grid)."""
     import math
     ew = area_width - 2 * wall_margin  # centered: same effective width

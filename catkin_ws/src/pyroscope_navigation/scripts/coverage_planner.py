@@ -20,7 +20,7 @@ from std_msgs.msg import Bool, String
 
 # Margin inset from area boundary so waypoints never land on walls.
 # Must be >= robot half-width (0.125m) + inflation_radius (0.15m).
-WALL_MARGIN = 0.40  # meters - must be > robot_half_width (0.125m) + inflation_radius (0.20m)
+WALL_MARGIN = 0.25  # meters - must be > robot_half_width (0.125m) + inflation_radius (0.12m)
 
 
 class CoveragePlanner:
@@ -50,8 +50,8 @@ class CoveragePlanner:
         self.recovery_backup_distance = rospy.get_param('~recovery_backup_distance', 0.35)
         self.recovery_clearance = rospy.get_param('~recovery_clearance', 0.30)
         self.waypoint_validation_radius = rospy.get_param('~waypoint_validation_radius', 0.18)
-        self.waypoint_cost_threshold = int(rospy.get_param('~waypoint_cost_threshold', 80))
-        self.scan_blocked_margin = rospy.get_param('~scan_blocked_margin', 0.20)
+        self.waypoint_cost_threshold = int(rospy.get_param('~waypoint_cost_threshold', 253))
+        self.scan_blocked_margin = rospy.get_param('~scan_blocked_margin', 2.0)
         self.scan_blocked_sector = rospy.get_param('~scan_blocked_sector', 0.20)
 
         # State
