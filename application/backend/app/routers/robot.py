@@ -96,10 +96,18 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
     global mission_process
 
     if mission_process is not None and mission_process.poll() is None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Mission already running"
-        )
+        # Auto-stop the existing mission rather than erroring
+        try:
+            pgid = os.getpgid(mission_process.pid)
+            if pgid != os.getpgrp():
+                os.killpg(pgid, signal.SIGTERM)
+            else:
+                mission_process.terminate()
+            mission_process.wait(timeout=5)
+        except Exception:
+            pass
+        mission_process = None
+        stop_capture_loop()
 
     try:
         config = config or MissionConfig()
@@ -212,6 +220,19 @@ async def stop_coverage_mission(db: Session = Depends(get_db)):
         except Exception:
             pass
         mission_process = None  # noqa: PLW0602
+
+    # Stop the rover immediately by publishing zero velocity
+    try:
+        stop_cmd = (
+            'source /opt/ros/melodic/setup.bash && '
+            'rostopic pub -1 /cmd_vel geometry_msgs/Twist "{}"'
+        )
+        subprocess.Popen(['bash', '-c', stop_cmd], env={
+            k: v for k, v in os.environ.items()
+            if k not in ('VIRTUAL_ENV', 'PYTHONHOME', 'PYTHONPATH', 'CONDA_DEFAULT_ENV')
+        })
+    except Exception:
+        pass
 
     if stopped_scan_id:
         scan = db.query(ScanRecord).filter(ScanRecord.id == stopped_scan_id).first()
