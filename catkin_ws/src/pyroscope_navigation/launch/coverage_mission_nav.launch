@@ -9,10 +9,6 @@
     <arg name="dwell_time" default="3.0"/>
     <arg name="waypoint_timeout" default="60.0"/>
 
-    <!-- Static transform: base_link -> laser (15cm above base) -->
-    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_tf"
-          args="0 0 0.15 0 0 0 base_link laser 100"/>
-
     <!-- move_base with mapless rolling-window costmaps and DWA planner -->
     <node pkg="move_base" type="move_base" name="move_base" output="screen">
         <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
