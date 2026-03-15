@@ -65,7 +65,9 @@ def capture_once(save_image_path=None, simulate=False):
             min_t, max_t = float(np.min(frame)), float(np.max(frame))
             frame_clip = np.clip(frame, min_t, max_t)
             filt_uint8 = cv_filter(remap(frame_clip), par, use_median=True, use_bilat=True, use_nlm=False)
-            cv.imwrite(save_image_path, filt_uint8)
+            # Publish/store thermal image in a common pseudo-color style for UI display.
+            thermal_color = cv.applyColorMap(filt_uint8, cv.COLORMAP_INFERNO)
+            cv.imwrite(save_image_path, thermal_color)
             image_path = save_image_path
     finally:
         mi48.stop()

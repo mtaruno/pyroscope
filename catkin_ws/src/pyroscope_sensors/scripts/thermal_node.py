@@ -11,6 +11,10 @@ import rospy
 from std_msgs.msg import Float64
 from sensor_msgs.msg import Image
 from std_msgs.msg import Header
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 
 
 def cv2_to_ros_image(cv2_img, encoding="bgr8", frame_id="thermal"):
@@ -61,6 +65,9 @@ def main():
     rate_hz = rospy.get_param("~rate", 0.33)  # ~every 3 s
     publish_image = rospy.get_param("~publish_image", True)
     simulate = rospy.get_param("~simulate", False)
+    if publish_image and cv2 is None:
+        rospy.logerr("OpenCV (cv2) not available: thermal image publishing disabled.")
+        publish_image = False
 
     pub_mean = rospy.Publisher("/sensors/thermal/mean", Float64, queue_size=1)
     pub_image = rospy.Publisher("/sensors/thermal/image", Image, queue_size=1) if publish_image else None
@@ -77,7 +84,6 @@ def main():
             if mean is not None:
                 pub_mean.publish(Float64(data=float(mean)))
             if pub_image and result.get("image_path") and os.path.exists(result["image_path"]):
-                import cv2
                 img = cv2.imread(result["image_path"])
                 if img is not None:
                     msg = cv2_to_ros_image(img, encoding="bgr8", frame_id="thermal")
