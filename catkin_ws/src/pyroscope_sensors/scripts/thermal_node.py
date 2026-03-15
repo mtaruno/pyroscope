@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 ROS node: read thermal camera once per period, publish mean to /sensors/thermal/mean
 and optional image to /sensors/thermal/image. Run on Jetson.
