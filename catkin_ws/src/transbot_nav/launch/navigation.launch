@@ -1,10 +1,17 @@
 <launch>
     <!-- Map file argument (path to .yaml file from map_saver) -->
     <arg name="map_file" default="$(find transbot_nav)/maps/my_map.yaml"/>
+    <arg name="laser_x" default="0.0"/>
+    <arg name="laser_y" default="0.0"/>
+    <arg name="laser_z" default="0.15"/>
+    <!-- roll=pi fixes a left/right mirrored scan without rotating front/back -->
+    <arg name="laser_roll" default="3.141592653589793"/>
+    <arg name="laser_pitch" default="0.0"/>
+    <arg name="laser_yaw" default="0.0"/>
 
     <!-- Static TF: base_link to laser -->
     <node pkg="tf" type="static_transform_publisher" name="lidar_tf"
-          args="0 0 0.15 0 0 0 base_link laser 100" />
+          args="$(arg laser_x) $(arg laser_y) $(arg laser_z) $(arg laser_roll) $(arg laser_pitch) $(arg laser_yaw) base_link laser 100" />
 
     <!-- Map Server -->
     <node pkg="map_server" type="map_server" name="map_server" args="$(arg map_file)" output="screen"/>
