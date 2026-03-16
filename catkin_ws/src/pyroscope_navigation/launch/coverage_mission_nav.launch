@@ -62,6 +62,6 @@
         <param name="origin_y" value="$(arg origin_y)"/>
         <param name="dwell_time" value="$(arg dwell_time)"/>
         <param name="waypoint_timeout" value="$(arg waypoint_timeout)"/>
-        <param name="waypoint_cost_threshold" value="200"/>
+        <param name="waypoint_cost_threshold" value="252"/>
     </node>
 </launch>

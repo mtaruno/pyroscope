@@ -54,7 +54,7 @@ class CoveragePlanner:
         self.recovery_backup_distance = rospy.get_param('~recovery_backup_distance', 0.35)
         self.recovery_clearance = rospy.get_param('~recovery_clearance', 0.30)
         self.waypoint_validation_radius = rospy.get_param('~waypoint_validation_radius', 0.18)
-        self.waypoint_cost_threshold = int(rospy.get_param('~waypoint_cost_threshold', 200))
+        self.waypoint_cost_threshold = int(rospy.get_param('~waypoint_cost_threshold', 252))
         self.scan_blocked_margin = rospy.get_param('~scan_blocked_margin', 2.0)
         self.scan_blocked_sector = rospy.get_param('~scan_blocked_sector', 0.20)
 
@@ -636,36 +636,35 @@ class CoveragePlanner:
         self.waypoint_markers_pub.publish(array)
 
     def run(self):
-        # Wait for SLAM map and costmap to initialize
-        rospy.loginfo("Waiting for SLAM map and costmap to initialize...")
+        # Wait for costmap to initialize (this is what we use for waypoint selection)
+        rospy.logwarn("Waiting for costmap to initialize...")
         deadline = rospy.Time.now() + rospy.Duration(30.0)
         rate = rospy.Rate(2)
         while not rospy.is_shutdown() and rospy.Time.now() < deadline:
             age = self.get_costmap_age()
-            map_ready = self.latest_map is not None
-            if age is not None and age < self.costmap_stale_timeout and map_ready:
-                rospy.loginfo("SLAM map and costmap ready")
+            if age is not None and age < self.costmap_stale_timeout:
+                rospy.logwarn("Costmap ready (age=%.1fs)", age)
                 break
+            rospy.logwarn("Waiting for costmap... (age=%s)", age)
             rate.sleep()
         else:
-            rospy.logwarn("Map/costmap not fully ready after 30s -- proceeding anyway")
+            rospy.logwarn("Costmap not ready after 30s -- proceeding anyway")
 
-        # Record mission start position (centre of search area)
+        # Record mission start position
         pose = self.get_robot_pose()
         if pose is not None:
             self.mission_start_x = pose[0]
             self.mission_start_y = pose[1]
-            rospy.loginfo("Mission start position: (%.2f, %.2f)", pose[0], pose[1])
+            rospy.logwarn("Mission start: (%.2f, %.2f) frame=%s",
+                          pose[0], pose[1], self.goal_frame)
         else:
             self.mission_start_x = self.origin_x
             self.mission_start_y = self.origin_y
-            rospy.logwarn("Cannot get pose -- using origin (%.2f, %.2f) as start",
-                          self.origin_x, self.origin_y)
+            rospy.logwarn("Cannot get pose -- using origin (%.2f, %.2f)", self.origin_x, self.origin_y)
 
-        # Dynamic waypoint selection: pick nearest free white cell each time
+        # Calculate target waypoint count from area and spacing
         total_target = int(rospy.get_param('~total_waypoints', 0))
         if total_target <= 0:
-            # Estimate from area and spacing
             ew = self.area_width - 2 * WALL_MARGIN
             eh = self.area_height - 2 * WALL_MARGIN
             if ew > 0 and eh > 0:
@@ -674,92 +673,75 @@ class CoveragePlanner:
             else:
                 total_target = 9
 
-        rospy.loginfo("Starting dynamic coverage mission: target %d waypoints", total_target)
+        rospy.logwarn("=== STARTING COVERAGE MISSION: %d waypoints, area=%.1fx%.1f ===",
+                      total_target, self.area_width, self.area_height)
         waypoint_count = 0
-        consecutive_failures = 0
-
-        # If no SLAM map after initial wait, generate blind grid as fallback
-        fallback_waypoints = []
-        if self.latest_map is None:
-            rospy.logwarn("No SLAM map -- generating blind grid fallback")
-            sx, sy = self.mission_start_x, self.mission_start_y
-            hw, hh = self.area_width / 2.0 - WALL_MARGIN, self.area_height / 2.0 - WALL_MARGIN
-            if hw > 0 and hh > 0:
-                num_rows = max(1, int(math.ceil(2 * hh / self.row_spacing)) + 1)
-                num_cols = max(1, int(math.ceil(2 * hw / self.waypoint_spacing)) + 1)
-                for row in range(num_rows):
-                    y_val = sy - hh + row * self.row_spacing
-                    cols = range(num_cols) if row % 2 == 0 else range(num_cols - 1, -1, -1)
-                    for col in cols:
-                        x_val = sx - hw + col * self.waypoint_spacing
-                        fallback_waypoints.append((x_val, y_val))
-                rospy.loginfo("Blind grid fallback: %d waypoints", len(fallback_waypoints))
-                total_target = len(fallback_waypoints)
-            fallback_index = 0
+        consecutive_no_target = 0
 
         while waypoint_count < total_target and not rospy.is_shutdown():
-            # Try SLAM-based dynamic waypoint; fall back to blind grid
+            rospy.logwarn("--- Finding waypoint %d/%d ---", waypoint_count + 1, total_target)
+
+            # Find next free cell in costmap
             target = self.find_next_free_waypoint()
 
             if target is None:
-                if fallback_waypoints and fallback_index < len(fallback_waypoints):
-                    target = fallback_waypoints[fallback_index]
-                    fallback_index += 1
-                    rospy.loginfo("Using fallback grid waypoint: (%.2f, %.2f)", target[0], target[1])
-                elif self.latest_map is None:
-                    rospy.logwarn("No SLAM map and no fallback -- waiting...")
-                    rospy.sleep(2.0)
-                    consecutive_failures += 1
-                    if consecutive_failures > 15:
-                        rospy.logwarn("No map after 30s of waiting -- aborting")
-                        break
-                    continue
+                consecutive_no_target += 1
+                if self.latest_costmap is None:
+                    rospy.logwarn("No costmap data yet -- waiting (attempt %d/15)...",
+                                  consecutive_no_target)
                 else:
-                    rospy.logwarn("No more free cells found in map -- mission complete")
+                    rospy.logwarn("No free waypoint found -- costmap has data but no valid cells "
+                                  "(attempt %d/10)", consecutive_no_target)
+                if consecutive_no_target > 10:
+                    rospy.logwarn("Giving up after %d failed attempts to find waypoint", consecutive_no_target)
                     break
+                rospy.sleep(2.0)
+                continue
 
-            consecutive_failures = 0
+            consecutive_no_target = 0
             x, y = target
 
-            # Update waypoints list for marker visualization
+            # Update markers for RViz
             self.waypoints = list(self.visited_positions) + [(x, y)]
             self.current_index = len(self.visited_positions)
             self.publish_waypoint_markers()
 
-            rospy.loginfo("Waypoint %d/%d: navigating to (%.2f, %.2f)",
+            rospy.logwarn(">>> Waypoint %d/%d: navigating to (%.2f, %.2f)",
                           waypoint_count + 1, total_target, x, y)
             self.publish_progress()
 
             attempt = 0
             reached = False
             while attempt < self.max_waypoint_failures and not rospy.is_shutdown():
+                rospy.logwarn("  Attempt %d/%d for (%.2f, %.2f)",
+                              attempt + 1, self.max_waypoint_failures, x, y)
                 success = self.send_move_base_goal(x, y)
                 if success:
                     reached = True
                     break
                 attempt += 1
-                rospy.logwarn("Failed attempt %d/%d for (%.2f, %.2f)",
-                              attempt, self.max_waypoint_failures, x, y)
+                rospy.logwarn("  Failed attempt %d/%d", attempt, self.max_waypoint_failures)
                 if attempt < self.max_waypoint_failures:
                     self.perform_escape_recovery()
 
             if reached:
-                rospy.loginfo("Reached waypoint %d -- dwelling %.1fs",
-                              waypoint_count + 1, self.dwell_time)
+                rospy.logwarn("<<< REACHED waypoint %d/%d at (%.2f, %.2f) -- dwelling %.1fs",
+                              waypoint_count + 1, total_target, x, y, self.dwell_time)
                 self.capture_ready_pub.publish(Bool(data=True))
                 rospy.sleep(self.dwell_time)
                 self.capture_ready_pub.publish(Bool(data=False))
                 self.visited_positions.append((x, y))
                 waypoint_count += 1
+                rospy.logwarn("    Captured %d/%d waypoints so far", waypoint_count, total_target)
             else:
-                rospy.logwarn("Skipping unreachable waypoint (%.2f, %.2f)", x, y)
-                # Mark it as visited so we don't try it again
+                rospy.logwarn("XXX Skipping unreachable waypoint (%.2f, %.2f)", x, y)
                 self.visited_positions.append((x, y))
 
         # Mission complete
         self.waypoints = list(self.visited_positions)
         self.current_index = len(self.waypoints)
-        rospy.loginfo("Coverage mission complete! %d waypoints captured", waypoint_count)
+        rospy.logwarn("=== MISSION COMPLETE: %d/%d waypoints captured ===",
+                      waypoint_count, total_target)
         self.complete_pub.publish(Bool(data=True))
         self.publish_progress()
         self.publish_waypoint_markers()
