@@ -76,6 +76,21 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
     const [error, setError] = useState(null)
     const [activeLayer, setActiveLayer] = useState('fire_risk')
 
+    const thermalNormalize = (value) => {
+        if (!Number.isFinite(value)) return 0
+
+        const THERMAL_FLOOR = 60
+        const THERMAL_CEILING = 170
+        const THERMAL_EXPONENT = 3.5
+
+        // Saturate everything above 170 into one top bucket.
+        const clipped = Math.max(THERMAL_FLOOR, Math.min(THERMAL_CEILING, value))
+        const base = (clipped - THERMAL_FLOOR) / (THERMAL_CEILING - THERMAL_FLOOR)
+
+        // Strongly compress the upper-mid range so 170..110 stays visually close.
+        return 1 - Math.pow(1 - base, THERMAL_EXPONENT)
+    }
+
     // Layer definitions with value extractors for interpolated heatmap
     const layers = [
         {
@@ -84,8 +99,8 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
             icon: <Thermometer size={16} />,
             extractor: (point) => point.plant_temperature,
             unit: '°C',
-            minValue: 5,
-            maxValue: 15
+            minValue: null,
+            maxValue: null
         },
         {
             id: 'air_temp',
@@ -167,6 +182,11 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
 
     // Get current layer configuration
     const currentLayer = layers.find(l => l.id === activeLayer)
+    const currentValues = (heatmapData?.data_points || [])
+        .map(point => currentLayer?.extractor(point))
+        .filter(value => Number.isFinite(value))
+    const legendMin = currentLayer?.minValue ?? (currentValues.length ? Math.min(...currentValues) : 0)
+    const legendMax = currentLayer?.maxValue ?? (currentValues.length ? Math.max(...currentValues) : 1)
 
     if (isLoading) {
         return (
@@ -246,8 +266,7 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
                                 opacity={0.75}
                                 minValueOverride={currentLayer.minValue}
                                 maxValueOverride={currentLayer.maxValue}
-                                colorIntensityMin={activeLayer === 'plant_temp' ? 50 : 0}
-                                colorIntensityMax={activeLayer === 'plant_temp' ? 200 : 255}
+                                normalizeValue={activeLayer === 'plant_temp' ? thermalNormalize : undefined}
                             />
                             <BoundaryLayer dataPoints={heatmapData.data_points} />
                         </>
@@ -265,8 +284,8 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
                 </div>
                 <div className="legend-gradient"></div>
                 <div className="legend-labels">
-                    <span>{currentLayer?.minValue || 0}</span>
-                    <span>{currentLayer?.maxValue || 1}</span>
+                    <span>{legendMin}</span>
+                    <span>{legendMax}</span>
                 </div>
             </div>
         </div>

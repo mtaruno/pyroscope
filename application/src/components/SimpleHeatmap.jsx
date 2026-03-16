@@ -7,14 +7,19 @@ import L from 'leaflet';
  * More reliable than GridLayer for React
  */
 
+const defaultNormalizeValue = (value, min, max) => {
+  if (max === min) return 0.5;
+  return Math.max(0, Math.min(1, (value - min) / (max - min)));
+};
+
 // Color gradient function
 const getColorForValue = (value, min, max, options = {}) => {
   const {
     colorIntensityMin = 0,
-    colorIntensityMax = 255
+    colorIntensityMax = 255,
+    normalizeValue = defaultNormalizeValue
   } = options;
-  const normalized = (value - min) / (max - min);
-  const clamped = Math.max(0, Math.min(1, normalized));
+  const clamped = Math.max(0, Math.min(1, normalizeValue(value, min, max)));
   
   const colors = [
     { pos: 0.0, r: 0, g: 0, b: 255 },
@@ -101,7 +106,8 @@ const SimpleHeatmap = ({
   minValueOverride = null,
   maxValueOverride = null,
   colorIntensityMin = 0,
-  colorIntensityMax = 255
+  colorIntensityMax = 255,
+  normalizeValue
 }) => {
   const map = useMap();
   const overlayRef = useRef(null);
@@ -183,7 +189,8 @@ const SimpleHeatmap = ({
         if (value !== null && !isNaN(value)) {
           const color = getColorForValue(value, minValue, maxValue, {
             colorIntensityMin,
-            colorIntensityMax
+            colorIntensityMax,
+            normalizeValue
           });
           const idx = (py * canvasSize + px) * 4;
           pixelData[idx] = color.r;
@@ -224,7 +231,7 @@ const SimpleHeatmap = ({
         console.log('[SimpleHeatmap] Overlay removed');
       }
     };
-  }, [map, data, valueExtractor, opacity, minValueOverride, maxValueOverride, colorIntensityMin, colorIntensityMax]);
+  }, [map, data, valueExtractor, opacity, minValueOverride, maxValueOverride, colorIntensityMin, colorIntensityMax, normalizeValue]);
   
   return null;
 };
