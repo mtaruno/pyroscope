@@ -40,6 +40,8 @@ _ros_cache: Dict[str, Any] = {
     "battery_percent": None,
     "capture_ready_queue": [],
     "coverage_complete": threading.Event(),  # set when /coverage/complete=true received
+    "bridge_ready": threading.Event(),
+    "bridge_error": None,
     "lock": threading.Lock(),
     "capture_ready_condition": threading.Condition(),
 }
@@ -101,6 +103,8 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         from std_msgs.msg import Float64, Float32, Bool
         from sensor_msgs.msg import Image
     except ImportError as e:
+        _ros_cache["bridge_error"] = str(e)
+        _ros_cache["bridge_ready"].set()
         logger.warning("rospy not available, ROS sensor bridge disabled: %s", e)
         return
 
@@ -305,6 +309,9 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
     else:
         logger.warning("NO image library available (need numpy+Pillow or cv_bridge+cv2). Image topics NOT subscribed.")
 
+    _ros_cache["bridge_error"] = None
+    _ros_cache["bridge_ready"].set()
+
     rate = rospy.Rate(2)
     while not _ros_stop.is_set() and not rospy.is_shutdown():
         rate.sleep()
@@ -324,13 +331,16 @@ def start_ros_bridge(thermal_image_save_dir: str, rgb_image_save_dir: str) -> bo
     if getattr(settings, "ROS_IP", None) or os.environ.get("ROS_IP"):
         os.environ["ROS_IP"] = (settings.ROS_IP or os.environ.get("ROS_IP", ""))
     _ros_stop.clear()
+    _ros_cache["bridge_error"] = None
+    _ros_cache["bridge_ready"].clear()
     _ros_thread = threading.Thread(
         target=_ros_subscriber_thread,
         args=(thermal_image_save_dir, rgb_image_save_dir),
         daemon=True,
     )
     _ros_thread.start()
-    return True
+    _ros_cache["bridge_ready"].wait(timeout=3.0)
+    return _ros_thread.is_alive() and _ros_cache["bridge_error"] is None
 
 
 def stop_ros_bridge():
@@ -339,6 +349,7 @@ def stop_ros_bridge():
     if _ros_thread:
         _ros_thread.join(timeout=3)
         _ros_thread = None
+    _ros_cache["bridge_ready"].clear()
 
 
 def get_latest_from_ros() -> Dict[str, Any]:
@@ -377,6 +388,10 @@ def clear_capture_ready_queue() -> None:
 def is_coverage_complete() -> bool:
     """Return True if /coverage/complete=true has been received since last clear."""
     return _ros_cache["coverage_complete"].is_set()
+
+
+def get_ros_bridge_error() -> Optional[str]:
+    return _ros_cache["bridge_error"]
 
 
 def is_ros_configured() -> bool:

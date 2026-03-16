@@ -28,6 +28,7 @@ from app.services.ros_sensor_bridge import (
     clear_capture_ready_queue,
     save_live_rgb_to_file,
     save_live_thermal_to_file,
+    get_ros_bridge_error,
 )
 
 
@@ -108,6 +109,16 @@ def _mark_scan_completed(scan_id: int) -> None:
             db.commit()
     except Exception:
         db.rollback()
+    finally:
+        db.close()
+
+
+def _count_saved_waypoints(scan_id: int) -> int:
+    db = SessionLocal()
+    try:
+        return db.query(ScanWaypointSample).filter(ScanWaypointSample.scan_id == scan_id).count()
+    except Exception:
+        return 0
     finally:
         db.close()
 
@@ -251,6 +262,8 @@ def start_capture_loop(scan_id: int, total_points: Optional[int] = None) -> None
     use_ros = is_ros_configured() and start_ros_bridge(thermal_dir, rgb_dir)
     clear_capture_ready_queue()
     logger.warning("Starting capture loop: scan_id=%d, total_points=%s, use_ros=%s", scan_id, total_points, use_ros)
+    if is_ros_configured() and not use_ros:
+        logger.error("ROS is configured but waypoint capture bridge did not start: %s", get_ros_bridge_error())
     _capture_state["use_ros"] = use_ros
     _capture_state["stop_event"] = threading.Event()
     with _capture_state_lock:
@@ -294,6 +307,8 @@ def get_capture_progress() -> dict:
         total_points = _capture_state.get("total_points")
         status = _capture_state.get("status") or "idle"
         last_capture_ready = _capture_state.get("last_capture_ready")
+    if scan_id is not None:
+        captured_points = max(captured_points, _count_saved_waypoints(scan_id))
     progress_percent = 0.0
     if total_points and total_points > 0:
         progress_percent = min(100.0, (captured_points / total_points) * 100.0)
