@@ -17,10 +17,10 @@ slam_gmapping:
   str: 0.1     # rotation noise from translation
   stt: 0.2     # translation noise from translation
 
-  # Update triggers — update after this much motion
-  linearUpdate: 0.05
-  angularUpdate: 0.05
-  temporalUpdate: 3.0
+  # Update triggers — less frequent updates = more stable map
+  linearUpdate: 0.2
+  angularUpdate: 0.15
+  temporalUpdate: 5.0
 
   # TF tolerance for WiFi latency between Jetson and remote PC
   transform_publish_period: 0.1
@@ -46,7 +46,7 @@ slam_gmapping:
   lsigma: 0.075
   ogain: 3.0
   lskip: 0
-  minimumScore: 50
+  minimumScore: 200
 
   # Fine-grained sampling
   llsamplerange: 0.01
