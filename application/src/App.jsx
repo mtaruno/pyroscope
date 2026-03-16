@@ -307,8 +307,10 @@ function App() {
   }
 
   const closeFuelPrompt = () => {
+    const scanId = fuelPromptScanId
     setShowFuelPromptModal(false)
     setFuelPromptError('')
+    if (scanId) loadAndShowScanResult(scanId)
   }
 
   const getFuelStage = (progress) => {
@@ -387,7 +389,10 @@ function App() {
       setFuelPromptError('Please select a local photo before starting estimation.')
       return
     }
-    closeFuelPrompt()
+    const scanId = fuelPromptScanId
+    setShowFuelPromptModal(false)
+    setFuelPromptError('')
+    loadAndShowScanResult(scanId)
 
     setFuelTask({
       visible: true,

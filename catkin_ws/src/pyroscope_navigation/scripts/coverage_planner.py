@@ -12,10 +12,11 @@ import math
 import actionlib
 import tf
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, Point
 from nav_msgs.msg import OccupancyGrid
 from sensor_msgs.msg import LaserScan
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, String, ColorRGBA
+from visualization_msgs.msg import Marker, MarkerArray
 
 
 # Margin inset from area boundary so waypoints never land on walls.
@@ -64,12 +65,12 @@ class CoveragePlanner:
         self.latest_scan_stamp = None
         self.latest_costmap = None
         self.latest_costmap_stamp = None
-
         # Publishers
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         self.capture_ready_pub = rospy.Publisher('/coverage/capture_ready', Bool, queue_size=1)
         self.progress_pub = rospy.Publisher('/coverage/progress', String, queue_size=1)
         self.complete_pub = rospy.Publisher('/coverage/complete', Bool, queue_size=1)
+        self.waypoint_markers_pub = rospy.Publisher('/coverage/waypoint_markers', MarkerArray, queue_size=1, latch=True)
         self.scan_sub = rospy.Subscriber('/scan', LaserScan, self.scan_callback, queue_size=1)
         self.costmap_sub = rospy.Subscriber('/move_base/global_costmap/costmap', OccupancyGrid, self.costmap_callback, queue_size=1)
         self.tf_listener = tf.TransformListener()
@@ -492,11 +493,54 @@ class CoveragePlanner:
         )
         self.progress_pub.publish(String(data=msg))
 
-    def run(self):
-        # Wait for gmapping to publish first /map and costmap to populate
-        rospy.loginfo("Waiting 8s for SLAM map and costmap to initialize...")
-        rospy.sleep(8.0)
+    def publish_waypoint_markers(self):
+        """Publish all waypoints as RViz markers: grey=pending, green=done, yellow=current target."""
+        array = MarkerArray()
+        for i, (x, y) in enumerate(self.waypoints):
+            m = Marker()
+            m.header.frame_id = "map"
+            m.header.stamp = rospy.Time.now()
+            m.ns = "coverage_waypoints"
+            m.id = i
+            m.type = Marker.CYLINDER
+            m.action = Marker.ADD
+            m.pose.position.x = x
+            m.pose.position.y = y
+            m.pose.position.z = 0.05
+            m.pose.orientation.w = 1.0
+            m.scale.x = 0.15
+            m.scale.y = 0.15
+            m.scale.z = 0.10
+            if i < self.current_index:
+                # Done -- green
+                m.color = ColorRGBA(0.0, 0.9, 0.2, 0.8)
+            elif i == self.current_index:
+                # Current target -- yellow, larger
+                m.color = ColorRGBA(1.0, 0.9, 0.0, 1.0)
+                m.scale.x = 0.25
+                m.scale.y = 0.25
+                m.scale.z = 0.15
+            else:
+                # Pending -- grey
+                m.color = ColorRGBA(0.6, 0.6, 0.6, 0.5)
+            array.markers.append(m)
+        self.waypoint_markers_pub.publish(array)
 
+    def run(self):
+        # Wait for gmapping to publish first /map and costmap to have real data
+        rospy.loginfo("Waiting for SLAM map and costmap to initialize...")
+        deadline = rospy.Time.now() + rospy.Duration(30.0)
+        rate = rospy.Rate(2)
+        while not rospy.is_shutdown() and rospy.Time.now() < deadline:
+            age = self.get_costmap_age()
+            if age is not None and age < self.costmap_stale_timeout:
+                rospy.loginfo("Costmap ready (age %.1fs) -- starting mission", age)
+                break
+            rate.sleep()
+        else:
+            rospy.logwarn("Costmap not ready after 30s -- starting anyway")
+
+        self.publish_waypoint_markers()
         rospy.loginfo("Starting coverage mission!")
 
         while self.current_index < len(self.waypoints) and not rospy.is_shutdown():
@@ -514,6 +558,7 @@ class CoveragePlanner:
                               self.current_index + 1, len(self.waypoints),
                               waypoint_failures + 1, self.max_waypoint_failures, x, y)
                 self.publish_progress()
+                self.publish_waypoint_markers()
 
                 if not self.waypoint_is_valid(x, y):
                     waypoint_failures = self.max_waypoint_failures

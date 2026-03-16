@@ -215,14 +215,13 @@ def _capture_loop_impl(scan_id: int):
                            sht40_data.get("humidity"),
                            thermal_data.get("thermal_mean"),
                            rgb_waypoint_path)
+            with _capture_state_lock:
+                _capture_state["captured_points"] = sequence_index + 1
         except Exception as e:
             logger.error("Failed to save waypoint %d: %s", sequence_index, e, exc_info=True)
             db.rollback()
         finally:
             db.close()
-
-        with _capture_state_lock:
-            _capture_state["captured_points"] = sequence_index + 1
             total_points = _capture_state["total_points"]
         sequence_index += 1
         if total_points and sequence_index >= total_points:
