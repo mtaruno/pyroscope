@@ -46,6 +46,11 @@ class CoveragePlanner:
 
         # Goal tolerance for proximity-based capture (should match dwa_planner.yaml xy_goal_tolerance)
         self.xy_goal_tolerance = rospy.get_param('~xy_goal_tolerance', 0.5)
+        spacing_limited_tolerance = max(0.10, min(self.waypoint_spacing, self.row_spacing) * 0.4)
+        self.proximity_capture_tolerance = rospy.get_param(
+            '~proximity_capture_tolerance',
+            min(self.xy_goal_tolerance, spacing_limited_tolerance)
+        )
 
         # Recovery parameters
         self.recovery_turn_speed = rospy.get_param('~recovery_turn_speed', 0.7)
@@ -96,7 +101,7 @@ class CoveragePlanner:
                       self.row_spacing, WALL_MARGIN)
         rospy.loginfo("  Dwell: %.1fs, timeout: %.1fs, retries: %d, proximity: %.2fm",
                       self.dwell_time, self.waypoint_timeout,
-                      self.max_waypoint_failures, self.xy_goal_tolerance)
+                      self.max_waypoint_failures, self.proximity_capture_tolerance)
         rospy.loginfo("  Lawnmower grid with costmap validation")
 
     def generate_lawnmower_waypoints(self, start_x, start_y):
@@ -546,7 +551,7 @@ class CoveragePlanner:
     def send_move_base_goal(self, x, y):
         """Send a goal to move_base and wait for result.
         Returns True if move_base succeeds OR if the robot gets within
-        xy_goal_tolerance of the target (proximity capture), whichever comes first.
+        proximity_capture_tolerance of the target (proximity capture), whichever comes first.
         """
         pose = self.get_robot_pose()
         if pose is not None:
@@ -587,7 +592,7 @@ class CoveragePlanner:
                 pose = self.get_robot_pose()
                 if pose is not None:
                     dist = math.sqrt((pose[0] - x) ** 2 + (pose[1] - y) ** 2)
-                    if dist <= self.xy_goal_tolerance:
+                    if dist <= self.proximity_capture_tolerance:
                         rospy.loginfo("Proximity capture: robot %.2fm from (%.2f, %.2f) after state %d",
                                       dist, x, y, state)
                         self.move_base_client.cancel_goal()
@@ -599,7 +604,7 @@ class CoveragePlanner:
             pose = self.get_robot_pose()
             if pose is not None:
                 dist = math.sqrt((pose[0] - x) ** 2 + (pose[1] - y) ** 2)
-                if dist <= self.xy_goal_tolerance:
+                if dist <= self.proximity_capture_tolerance:
                     rospy.loginfo("Proximity capture: robot %.2fm from (%.2f, %.2f) -- cancelling goal",
                                   dist, x, y)
                     self.move_base_client.cancel_goal()
@@ -622,7 +627,7 @@ class CoveragePlanner:
         pose = self.get_robot_pose()
         if pose is not None:
             dist = math.sqrt((pose[0] - x) ** 2 + (pose[1] - y) ** 2)
-            if dist <= self.xy_goal_tolerance:
+            if dist <= self.proximity_capture_tolerance:
                 rospy.loginfo("Proximity capture on timeout: robot %.2fm from (%.2f, %.2f)", dist, x, y)
                 self.move_base_client.cancel_goal()
                 return True
