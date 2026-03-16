@@ -208,6 +208,7 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
             mission_process = None  # noqa: PLW0602
 
         # Start waypoint capture loop (one sample per '/coverage/capture_ready'=true message).
+        print("[MISSION] Starting capture loop: scan_id=%d, total_points=%d" % (scan_id, total_points), flush=True)
         start_capture_loop(scan_id, total_points=total_points)
         progress = get_capture_progress()
 
