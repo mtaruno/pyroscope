@@ -9,8 +9,8 @@
     <arg name="dwell_time" default="3.0"/>
     <arg name="waypoint_timeout" default="25.0"/>
 
-    <!-- Static TF: laser 15cm above base_link (duplicated from jetson_bringup for robustness) -->
-    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_tf"
+    <!-- Static TF fallback: only takes effect if jetson_bringup didn't publish it -->
+    <node pkg="tf" type="static_transform_publisher" name="base_to_laser_tf_nav"
           args="0 0 0.15 0 0 0 base_link laser 100"/>
 
     <!-- GMapping SLAM: builds /map on the fly, publishes map→odom TF -->
