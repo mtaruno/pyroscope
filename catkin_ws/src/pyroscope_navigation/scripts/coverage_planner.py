@@ -100,12 +100,11 @@ class CoveragePlanner:
         rospy.loginfo("  Waypoints will be generated from SLAM map once ready")
 
     def find_next_free_waypoint(self):
-        """Find the nearest unvisited free cell in the SLAM map, at least
-        row_spacing away from all previously visited waypoints.
-        Constrained to within area_width x area_height of the mission start.
+        """Find the nearest unvisited low-cost cell in the LIVE COSTMAP.
+        Uses the global costmap (not raw /map) since costmap + TF are already accurate.
         Returns (x, y) or None if no suitable cell found."""
-        m = self.latest_map
-        if m is None:
+        cm = self.latest_costmap
+        if cm is None:
             return None
 
         pose = self.get_robot_pose()
@@ -113,20 +112,19 @@ class CoveragePlanner:
             return None
         robot_x, robot_y = pose[0], pose[1]
 
-        info = m.info
+        info = cm.info
         res = info.resolution
         ox = info.origin.position.x
         oy = info.origin.position.y
         spacing = self.row_spacing
         spacing_sq = spacing * spacing
+        threshold = self.waypoint_cost_threshold
 
-        # Search area bounds (centred on mission start position)
+        # Search area bounds (centred on robot's CURRENT position)
         half_w = self.area_width / 2.0
         half_h = self.area_height / 2.0
-        start_x = self.mission_start_x
-        start_y = self.mission_start_y
 
-        # Step through map at half the spacing (fine enough to not miss free patches)
+        # Step through costmap at half the spacing
         step = max(1, int(self.waypoint_spacing / res / 2))
 
         best = None
@@ -134,20 +132,25 @@ class CoveragePlanner:
 
         for my in range(0, info.height, step):
             for mx in range(0, info.width, step):
-                val = m.data[my * info.width + mx]
-                if val != 0:
-                    continue  # skip occupied/unknown
+                cost = cm.data[my * info.width + mx]
+                # Only consider low-cost cells (free space with no inflation)
+                if cost < 0 or cost >= threshold:
+                    continue
 
                 wx = ox + (mx + 0.5) * res
                 wy = oy + (my + 0.5) * res
 
-                # Must be within the mission area
-                if abs(wx - start_x) > half_w or abs(wy - start_y) > half_h:
+                # Must be within the mission area (relative to current robot position)
+                if abs(wx - robot_x) > half_w or abs(wy - robot_y) > half_h:
                     continue
 
-                # Quick distance check before expensive visited/obstacle checks
+                # Quick distance check
                 dist = (wx - robot_x) ** 2 + (wy - robot_y) ** 2
                 if dist >= best_dist:
+                    continue
+
+                # Must not be too close to robot (at least 0.3m away)
+                if dist < 0.09:
                     continue
 
                 # Must be at least spacing away from all visited waypoints
@@ -163,23 +166,12 @@ class CoveragePlanner:
                 best = (wx, wy)
 
         if best is not None:
-            rospy.loginfo("Next free waypoint: (%.2f, %.2f) dist=%.2fm (step=%d, visited=%d)",
-                          best[0], best[1], math.sqrt(best_dist), step,
+            rospy.loginfo("Next free waypoint: (%.2f, %.2f) dist=%.2fm cost_thresh=%d visited=%d",
+                          best[0], best[1], math.sqrt(best_dist), threshold,
                           len(self.visited_positions))
         else:
-            # Count free cells in area to debug
-            free_count = 0
-            for cy in range(0, info.height, step):
-                for cx in range(0, info.width, step):
-                    if m.data[cy * info.width + cx] == 0:
-                        cwx = ox + (cx + 0.5) * res
-                        cwy = oy + (cy + 0.5) * res
-                        if abs(cwx - start_x) <= half_w and abs(cwy - start_y) <= half_h:
-                            free_count += 1
-            rospy.logwarn("No free waypoint found: %d free cells in area, %d visited, "
-                          "spacing=%.1f, area=%.0fx%.0f, start=(%.1f,%.1f)",
-                          free_count, len(self.visited_positions), spacing,
-                          self.area_width, self.area_height, start_x, start_y)
+            rospy.logwarn("No free waypoint found (costmap=%dx%d, visited=%d, threshold=%d)",
+                          info.width, info.height, len(self.visited_positions), threshold)
         return best
 
     def validate_waypoint_distances(self):
@@ -529,6 +521,8 @@ class CoveragePlanner:
         # Poll for move_base success OR proximity to target
         rate = rospy.Rate(10)
         deadline = rospy.Time.now() + rospy.Duration(self.waypoint_timeout)
+        map_check_interval = 0
+        MAP_CHECK_EVERY = 20  # check map validity every 2 seconds (20 * 0.1s)
 
         while not rospy.is_shutdown() and rospy.Time.now() < deadline:
             state = self.move_base_client.get_state()
@@ -561,6 +555,17 @@ class CoveragePlanner:
                                   dist, x, y)
                     self.move_base_client.cancel_goal()
                     return True
+
+            # Periodically check if target is still in free space (map may have shifted)
+            map_check_interval += 1
+            if map_check_interval >= MAP_CHECK_EVERY:
+                map_check_interval = 0
+                val = self.map_cell_value(x, y)
+                if val is not None and val != 0:
+                    rospy.logwarn("Target (%.2f, %.2f) is no longer free in map (val=%d) -- cancelling",
+                                  x, y, val)
+                    self.move_base_client.cancel_goal()
+                    return False
 
             rate.sleep()
 

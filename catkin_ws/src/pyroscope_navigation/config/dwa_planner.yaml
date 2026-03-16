@@ -26,10 +26,10 @@ DWAPlannerROS:
   vy_samples: 1
   vtheta_samples: 20
 
-  # Trajectory scoring -- balance reaching goals vs avoiding walls
-  path_distance_bias: 20.0
-  goal_distance_bias: 28.0
-  occdist_scale: 0.8
+  # Trajectory scoring -- prioritize obstacle avoidance over reaching goal
+  path_distance_bias: 32.0
+  goal_distance_bias: 20.0
+  occdist_scale: 2.5
 
   # Oscillation prevention
   oscillation_reset_dist: 0.10
