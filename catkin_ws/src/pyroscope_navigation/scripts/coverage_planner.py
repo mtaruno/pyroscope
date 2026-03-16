@@ -43,6 +43,9 @@ class CoveragePlanner:
         self.scan_stale_timeout = rospy.get_param('~scan_stale_timeout', 1.0)
         self.costmap_stale_timeout = rospy.get_param('~costmap_stale_timeout', 2.0)
 
+        # Goal tolerance for proximity-based capture (should match dwa_planner.yaml xy_goal_tolerance)
+        self.xy_goal_tolerance = rospy.get_param('~xy_goal_tolerance', 0.5)
+
         # Recovery parameters
         self.recovery_turn_speed = rospy.get_param('~recovery_turn_speed', 0.7)
         self.recovery_turn_angle = rospy.get_param('~recovery_turn_angle', 1.0)
