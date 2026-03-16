@@ -126,15 +126,14 @@ class CoveragePlanner:
         start_x = self.mission_start_x
         start_y = self.mission_start_y
 
-        # Step through map at waypoint_spacing intervals (not every cell)
-        step = max(1, int(self.waypoint_spacing / res))
-        margin_cells = max(1, int(WALL_MARGIN / res))
+        # Step through map at half the spacing (fine enough to not miss free patches)
+        step = max(1, int(self.waypoint_spacing / res / 2))
 
         best = None
         best_dist = float('inf')
 
-        for my in range(margin_cells, info.height - margin_cells, step):
-            for mx in range(margin_cells, info.width - margin_cells, step):
+        for my in range(0, info.height, step):
+            for mx in range(0, info.width, step):
                 val = m.data[my * info.width + mx]
                 if val != 0:
                     continue  # skip occupied/unknown
@@ -160,30 +159,27 @@ class CoveragePlanner:
                 if too_close:
                     continue
 
-                # Must be at least wall_margin from occupied cells
-                near_obstacle = False
-                for dy in range(-margin_cells, margin_cells + 1):
-                    if near_obstacle:
-                        break
-                    for dx in range(-margin_cells, margin_cells + 1):
-                        nx = mx + dx
-                        ny = my + dy
-                        if m.data[ny * info.width + nx] > 50:
-                            near_obstacle = True
-                            break
-                if near_obstacle:
-                    continue
-
                 best_dist = dist
                 best = (wx, wy)
 
         if best is not None:
-            rospy.loginfo("Next free waypoint: (%.2f, %.2f) dist=%.2fm",
-                          best[0], best[1], math.sqrt(best_dist))
+            rospy.loginfo("Next free waypoint: (%.2f, %.2f) dist=%.2fm (step=%d, visited=%d)",
+                          best[0], best[1], math.sqrt(best_dist), step,
+                          len(self.visited_positions))
         else:
-            rospy.loginfo("No free waypoint found (visited=%d, map=%dx%d, area=%.0fx%.0f)",
-                          len(self.visited_positions), info.width, info.height,
-                          self.area_width, self.area_height)
+            # Count free cells in area to debug
+            free_count = 0
+            for cy in range(0, info.height, step):
+                for cx in range(0, info.width, step):
+                    if m.data[cy * info.width + cx] == 0:
+                        cwx = ox + (cx + 0.5) * res
+                        cwy = oy + (cy + 0.5) * res
+                        if abs(cwx - start_x) <= half_w and abs(cwy - start_y) <= half_h:
+                            free_count += 1
+            rospy.logwarn("No free waypoint found: %d free cells in area, %d visited, "
+                          "spacing=%.1f, area=%.0fx%.0f, start=(%.1f,%.1f)",
+                          free_count, len(self.visited_positions), spacing,
+                          self.area_width, self.area_height, start_x, start_y)
         return best
 
     def validate_waypoint_distances(self):
