@@ -84,16 +84,16 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
         const THERMAL_MIN = 40
         const THERMAL_EXPONENT = 2.8
 
-        // >=140 keeps the same blue bucket.
-        if (value >= THERMAL_BLUE_CUTOFF) return 0
-        // <=40 is saturated to pure red.
-        if (value <= THERMAL_MIN) return 1
+        // Hot end should be red.
+        if (value >= THERMAL_BLUE_CUTOFF) return 1
+        // Cold end should be blue.
+        if (value <= THERMAL_MIN) return 0
 
         // Clamp to 150..40 working interval.
         const clamped = Math.max(THERMAL_MIN, Math.min(THERMAL_MAX, value))
-        // As value drops from 140 -> 40, normalized rises from 0 -> 1.
-        const linear = (THERMAL_BLUE_CUTOFF - clamped) / (THERMAL_BLUE_CUTOFF - THERMAL_MIN)
-        // Exponential rise for stronger separation near the hotter target band.
+        // As value rises from 40 -> 140, normalized rises from 0 -> 1.
+        const linear = (clamped - THERMAL_MIN) / (THERMAL_BLUE_CUTOFF - THERMAL_MIN)
+        // Exponential rise: preserve background stability while making hot targets pop.
         return Math.pow(linear, THERMAL_EXPONENT)
     }
 

@@ -6,6 +6,7 @@ import hashlib
 import mimetypes
 from typing import Optional, List, Dict, Any
 import requests
+from urllib.parse import urlparse, urlunparse
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.utils.file_handler import ensure_upload_directory
@@ -63,12 +64,33 @@ class ImageService:
         result = payload.get("fuel_estimation") if isinstance(payload, dict) else None
         if not isinstance(result, dict):
             result = payload if isinstance(payload, dict) else {}
+        fuels = result.get("fuels") if isinstance(result.get("fuels"), dict) else {}
+        one_hour = self._to_float(
+            result.get("one_hour_fuel", fuels.get("one_hour"))
+        )
+        ten_hour = self._to_float(
+            result.get("ten_hour_fuel", fuels.get("ten_hour"))
+        )
+        hundred_hour = self._to_float(
+            result.get("hundred_hour_fuel", fuels.get("hundred_hour"))
+        )
+        total = self._to_float(result.get("total_fuel_load", result.get("fuel_load")))
+        if total is None:
+            parts = [v for v in (one_hour, ten_hour, hundred_hour) if v is not None]
+            total = sum(parts) if parts else None
+
+        pine_cone_count = None
+        if result.get("pine_cone_count") is not None:
+            pine_cone_count = int(result["pine_cone_count"])
+        elif isinstance(result.get("pines"), list):
+            pine_cone_count = len(result["pines"])
+
         return {
-            "total_fuel_load": self._to_float(result.get("total_fuel_load", result.get("fuel_load"))),
-            "one_hour_fuel": self._to_float(result.get("one_hour_fuel")),
-            "ten_hour_fuel": self._to_float(result.get("ten_hour_fuel")),
-            "hundred_hour_fuel": self._to_float(result.get("hundred_hour_fuel")),
-            "pine_cone_count": int(result["pine_cone_count"]) if result.get("pine_cone_count") is not None else None,
+            "total_fuel_load": total,
+            "one_hour_fuel": one_hour,
+            "ten_hour_fuel": ten_hour,
+            "hundred_hour_fuel": hundred_hour,
+            "pine_cone_count": pine_cone_count,
         }
 
     def estimate_fuel_for_image_path(self, image_path: str) -> Dict[str, Any]:
@@ -84,21 +106,45 @@ class ImageService:
 
         guessed_mime = mimetypes.guess_type(image_path)[0] or "image/jpeg"
         filename = os.path.basename(image_path)
+        parsed = urlparse(api_url)
+        base_path = (parsed.path or "").strip()
+        candidate_urls = [api_url.rstrip("/")]
+        # If user configured only domain root, try known POST paths for this API.
+        if base_path in ("", "/"):
+            candidate_urls.extend([
+                urlunparse((parsed.scheme, parsed.netloc, "/estimate", "", "", "")),
+                urlunparse((parsed.scheme, parsed.netloc, "/upload", "", "", "")),
+            ])
+        # De-duplicate while keeping order.
+        candidate_urls = list(dict.fromkeys(candidate_urls))
+
+        last_error = None
         with open(image_path, "rb") as fp:
-            files = {"file": (filename, fp, guessed_mime)}
-            data = {"headless": str(bool(settings.FUEL_ESTIMATION_HEADLESS)).lower()}
-            try:
-                resp = requests.post(
-                    api_url,
-                    files=files,
-                    data=data,
-                    headers=headers,
-                    timeout=settings.FUEL_ESTIMATION_TIMEOUT,
-                )
-                resp.raise_for_status()
-                payload = resp.json()
-            except Exception as exc:
-                return {"success": False, "error": str(exc)}
+            for idx, candidate_url in enumerate(candidate_urls):
+                if idx > 0:
+                    fp.seek(0)
+                files = {"file": (filename, fp, guessed_mime)}
+                data = {"headless": str(bool(settings.FUEL_ESTIMATION_HEADLESS)).lower()}
+                try:
+                    resp = requests.post(
+                        candidate_url,
+                        files=files,
+                        data=data,
+                        headers=headers,
+                        timeout=settings.FUEL_ESTIMATION_TIMEOUT,
+                    )
+                    # Retry another candidate only for method/path mismatch.
+                    if resp.status_code in (404, 405):
+                        last_error = f"{resp.status_code} on {candidate_url}"
+                        continue
+                    resp.raise_for_status()
+                    payload = resp.json()
+                    break
+                except Exception as exc:
+                    last_error = str(exc)
+                    continue
+            else:
+                return {"success": False, "error": last_error or "Fuel API request failed"}
 
         parsed = self._extract_fuel_fields(payload)
         if parsed["total_fuel_load"] is None:
