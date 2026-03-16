@@ -97,82 +97,65 @@ class CoveragePlanner:
         rospy.loginfo("  Dwell: %.1fs, timeout: %.1fs, retries: %d, proximity: %.2fm",
                       self.dwell_time, self.waypoint_timeout,
                       self.max_waypoint_failures, self.xy_goal_tolerance)
-        rospy.loginfo("  Waypoints will be generated from SLAM map once ready")
+        rospy.loginfo("  Lawnmower grid with costmap validation")
 
-    def find_next_free_waypoint(self):
-        """Find the nearest unvisited low-cost cell in the LIVE COSTMAP.
-        Uses the global costmap (not raw /map) since costmap + TF are already accurate.
-        Returns (x, y) or None if no suitable cell found."""
-        cm = self.latest_costmap
-        if cm is None:
-            return None
-
-        pose = self.get_robot_pose()
-        if pose is None:
-            return None
-        robot_x, robot_y = pose[0], pose[1]
-
-        info = cm.info
-        res = info.resolution
-        ox = info.origin.position.x
-        oy = info.origin.position.y
-        spacing = self.row_spacing
-        spacing_sq = spacing * spacing
-        threshold = self.waypoint_cost_threshold
-
-        # Search area bounds (centred on robot's CURRENT position)
+    def generate_lawnmower_waypoints(self, start_x, start_y):
+        """Generate a boustrophedon (lawnmower) grid of waypoints in map frame.
+        Waypoints are fixed coordinates relative to the robot's start position.
+        Returns list of (x, y) tuples."""
+        margin = WALL_MARGIN
         half_w = self.area_width / 2.0
         half_h = self.area_height / 2.0
 
-        # Step through costmap at half the spacing
-        step = max(1, int(self.waypoint_spacing / res / 2))
+        # Grid bounds relative to start position
+        x_min = start_x - half_w + margin
+        x_max = start_x + half_w - margin
+        y_min = start_y - half_h + margin
+        y_max = start_y + half_h - margin
 
-        best = None
-        best_dist = float('inf')
+        waypoints = []
+        row_idx = 0
+        y = y_min
+        while y <= y_max:
+            if row_idx % 2 == 0:
+                # Left to right
+                x = x_min
+                while x <= x_max:
+                    waypoints.append((x, y))
+                    x += self.waypoint_spacing
+            else:
+                # Right to left
+                x = x_max
+                while x >= x_min:
+                    waypoints.append((x, y))
+                    x -= self.waypoint_spacing
+            y += self.row_spacing
+            row_idx += 1
 
-        for my in range(0, info.height, step):
-            for mx in range(0, info.width, step):
-                cost = cm.data[my * info.width + mx]
-                # Only consider low-cost cells (free space with no inflation)
-                if cost < 0 or cost >= threshold:
-                    continue
+        rospy.logwarn("Generated %d lawnmower waypoints over %.1fx%.1f area",
+                      len(waypoints), self.area_width, self.area_height)
+        return waypoints
 
-                wx = ox + (mx + 0.5) * res
-                wy = oy + (my + 0.5) * res
+    def validate_waypoint_costmap(self, x, y):
+        """Check if waypoint is in free space on the live costmap.
+        Returns True if free (cost < threshold), False if blocked or unknown."""
+        if self.latest_costmap is None:
+            return True  # no costmap yet, trust the grid
 
-                # Must be within the mission area (relative to current robot position)
-                if abs(wx - robot_x) > half_w or abs(wy - robot_y) > half_h:
-                    continue
+        coords = self.world_to_costmap(x, y)
+        if coords is None:
+            return True  # outside costmap bounds, let move_base handle it
 
-                # Quick distance check
-                dist = (wx - robot_x) ** 2 + (wy - robot_y) ** 2
-                if dist >= best_dist:
-                    continue
+        mx, my = coords
+        cost = self.costmap_cell(mx, my)
+        if cost is None:
+            return True
 
-                # Must not be too close to robot (at least 0.3m away)
-                if dist < 0.09:
-                    continue
-
-                # Must be at least spacing away from all visited waypoints
-                too_close = False
-                for vx, vy in self.visited_positions:
-                    if (wx - vx) ** 2 + (wy - vy) ** 2 < spacing_sq:
-                        too_close = True
-                        break
-                if too_close:
-                    continue
-
-                best_dist = dist
-                best = (wx, wy)
-
-        if best is not None:
-            rospy.loginfo("Next free waypoint: (%.2f, %.2f) dist=%.2fm cost_thresh=%d visited=%d",
-                          best[0], best[1], math.sqrt(best_dist), threshold,
-                          len(self.visited_positions))
-        else:
-            rospy.logwarn("No free waypoint found (costmap=%dx%d, visited=%d, threshold=%d)",
-                          info.width, info.height, len(self.visited_positions), threshold)
-        return best
+        if cost < 0 or cost >= self.waypoint_cost_threshold:
+            rospy.logwarn("Waypoint (%.2f, %.2f) blocked: cost=%d >= threshold=%d",
+                          x, y, cost, self.waypoint_cost_threshold)
+            return False
+        return True
 
     def validate_waypoint_distances(self):
         """Warn if consecutive waypoints exceed global costmap range"""
@@ -596,9 +579,10 @@ class CoveragePlanner:
     def publish_progress(self):
         """Publish current progress"""
         total = len(self.waypoints)
+        done = min(self.current_index + 1, total)
         msg = "{}/{} waypoints ({}%)".format(
-            self.current_index, total,
-            int(100.0 * self.current_index / total) if total > 0 else 0
+            done, total,
+            int(100.0 * done / total) if total > 0 else 0
         )
         self.progress_pub.publish(String(data=msg))
 
@@ -648,19 +632,10 @@ class CoveragePlanner:
         self.waypoint_markers_pub.publish(array)
 
     def run(self):
-        # Wait for costmap to initialize (this is what we use for waypoint selection)
-        rospy.logwarn("Waiting for costmap to initialize...")
-        deadline = rospy.Time.now() + rospy.Duration(30.0)
-        rate = rospy.Rate(2)
-        while not rospy.is_shutdown() and rospy.Time.now() < deadline:
-            age = self.get_costmap_age()
-            if age is not None and age < self.costmap_stale_timeout:
-                rospy.logwarn("Costmap ready (age=%.1fs)", age)
-                break
-            rospy.logwarn("Waiting for costmap... (age=%s)", age)
-            rate.sleep()
-        else:
-            rospy.logwarn("Costmap not ready after 30s -- proceeding anyway")
+        # Wait for TF to be available (need map->base_link for start position)
+        rospy.logwarn("Waiting for TF (map->base_link)...")
+        if not self.wait_for_fresh_pose(30.0):
+            rospy.logwarn("TF not available after 30s -- using origin params")
 
         # Record mission start position
         pose = self.get_robot_pose()
@@ -672,54 +647,54 @@ class CoveragePlanner:
         else:
             self.mission_start_x = self.origin_x
             self.mission_start_y = self.origin_y
-            rospy.logwarn("Cannot get pose -- using origin (%.2f, %.2f)", self.origin_x, self.origin_y)
+            rospy.logwarn("Cannot get pose -- using origin (%.2f, %.2f)",
+                          self.origin_x, self.origin_y)
 
-        # Calculate target waypoint count from area and spacing
-        total_target = int(rospy.get_param('~total_waypoints', 0))
-        if total_target <= 0:
-            ew = self.area_width - 2 * WALL_MARGIN
-            eh = self.area_height - 2 * WALL_MARGIN
-            if ew > 0 and eh > 0:
-                total_target = max(1, int(math.ceil(ew / self.waypoint_spacing)) *
-                                      int(math.ceil(eh / self.row_spacing)))
-            else:
-                total_target = 9
+        # Generate fixed lawnmower grid in map frame
+        self.waypoints = self.generate_lawnmower_waypoints(
+            self.mission_start_x, self.mission_start_y)
 
+        if not self.waypoints:
+            rospy.logwarn("No waypoints generated -- check area/spacing params")
+            return
+
+        # Clear stale waypoint markers from previous runs
+        self.clear_old_markers()
+        rospy.sleep(0.5)
+
+        # Show all planned waypoints in RViz
+        self.current_index = 0
+        self.publish_waypoint_markers()
+
+        total = len(self.waypoints)
         rospy.logwarn("=== STARTING COVERAGE MISSION: %d waypoints, area=%.1fx%.1f ===",
-                      total_target, self.area_width, self.area_height)
+                      total, self.area_width, self.area_height)
+
         waypoint_count = 0
-        consecutive_no_target = 0
+        skipped = 0
 
-        while waypoint_count < total_target and not rospy.is_shutdown():
-            rospy.logwarn("--- Finding waypoint %d/%d ---", waypoint_count + 1, total_target)
+        for i, (x, y) in enumerate(self.waypoints):
+            if rospy.is_shutdown():
+                break
 
-            # Find next free cell in costmap
-            target = self.find_next_free_waypoint()
-
-            if target is None:
-                consecutive_no_target += 1
-                if self.latest_costmap is None:
-                    rospy.logwarn("No costmap data yet -- waiting (attempt %d/15)...",
-                                  consecutive_no_target)
-                else:
-                    rospy.logwarn("No free waypoint found -- costmap has data but no valid cells "
-                                  "(attempt %d/10)", consecutive_no_target)
-                if consecutive_no_target > 10:
-                    rospy.logwarn("Giving up after %d failed attempts to find waypoint", consecutive_no_target)
-                    break
-                rospy.sleep(2.0)
-                continue
-
-            consecutive_no_target = 0
-            x, y = target
-
-            # Update markers for RViz
-            self.waypoints = list(self.visited_positions) + [(x, y)]
-            self.current_index = len(self.visited_positions)
+            self.current_index = i
             self.publish_waypoint_markers()
 
+            # Validate against live costmap -- skip if blocked, snap if possible
+            if not self.validate_waypoint_costmap(x, y):
+                # Try to snap to nearest free cell
+                snapped_x, snapped_y = self.snap_to_free_costmap(x, y)
+                if not self.validate_waypoint_costmap(snapped_x, snapped_y):
+                    rospy.logwarn("SKIP waypoint %d/%d (%.2f, %.2f) -- blocked in costmap",
+                                  i + 1, total, x, y)
+                    skipped += 1
+                    continue
+                rospy.logwarn("Snapped waypoint %d/%d: (%.2f,%.2f) -> (%.2f,%.2f)",
+                              i + 1, total, x, y, snapped_x, snapped_y)
+                x, y = snapped_x, snapped_y
+
             rospy.logwarn(">>> Waypoint %d/%d: navigating to (%.2f, %.2f)",
-                          waypoint_count + 1, total_target, x, y)
+                          i + 1, total, x, y)
             self.publish_progress()
 
             attempt = 0
@@ -738,22 +713,22 @@ class CoveragePlanner:
 
             if reached:
                 rospy.logwarn("<<< REACHED waypoint %d/%d at (%.2f, %.2f) -- dwelling %.1fs",
-                              waypoint_count + 1, total_target, x, y, self.dwell_time)
+                              i + 1, total, x, y, self.dwell_time)
                 self.capture_ready_pub.publish(Bool(data=True))
                 rospy.sleep(self.dwell_time)
                 self.capture_ready_pub.publish(Bool(data=False))
-                self.visited_positions.append((x, y))
                 waypoint_count += 1
-                rospy.logwarn("    Captured %d/%d waypoints so far", waypoint_count, total_target)
+                rospy.logwarn("    Captured %d/%d so far (%d skipped)",
+                              waypoint_count, total, skipped)
             else:
-                rospy.logwarn("XXX Skipping unreachable waypoint (%.2f, %.2f)", x, y)
-                self.visited_positions.append((x, y))
+                rospy.logwarn("XXX Could not reach waypoint %d/%d (%.2f, %.2f) -- skipping",
+                              i + 1, total, x, y)
+                skipped += 1
 
         # Mission complete
-        self.waypoints = list(self.visited_positions)
         self.current_index = len(self.waypoints)
-        rospy.logwarn("=== MISSION COMPLETE: %d/%d waypoints captured ===",
-                      waypoint_count, total_target)
+        rospy.logwarn("=== MISSION COMPLETE: %d reached, %d skipped, %d total ===",
+                      waypoint_count, skipped, total)
         self.complete_pub.publish(Bool(data=True))
         self.publish_progress()
         self.publish_waypoint_markers()
