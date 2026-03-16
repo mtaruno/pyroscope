@@ -54,7 +54,7 @@ class CoveragePlanner:
         self.recovery_backup_distance = rospy.get_param('~recovery_backup_distance', 0.35)
         self.recovery_clearance = rospy.get_param('~recovery_clearance', 0.30)
         self.waypoint_validation_radius = rospy.get_param('~waypoint_validation_radius', 0.18)
-        self.waypoint_cost_threshold = int(rospy.get_param('~waypoint_cost_threshold', 252))
+        self.waypoint_cost_threshold = int(rospy.get_param('~waypoint_cost_threshold', 50))
         self.scan_blocked_margin = rospy.get_param('~scan_blocked_margin', 2.0)
         self.scan_blocked_sector = rospy.get_param('~scan_blocked_sector', 0.20)
 
