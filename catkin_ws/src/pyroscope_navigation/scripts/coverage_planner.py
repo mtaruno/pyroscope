@@ -400,7 +400,10 @@ class CoveragePlanner:
         rospy.sleep(1.0)
 
     def send_move_base_goal(self, x, y):
-        """Send a goal to move_base and wait for result. Returns True on success."""
+        """Send a goal to move_base and wait for result.
+        Returns True if move_base succeeds OR if the robot gets within
+        xy_goal_tolerance of the target (proximity capture), whichever comes first.
+        """
         if not self.wait_for_fresh_pose(2.0):
             rospy.logwarn("Robot pose is stale before goal dispatch; refusing to send goal until TF recovers")
             return False
@@ -414,19 +417,57 @@ class CoveragePlanner:
         goal.target_pose.pose.orientation.w = 1.0
 
         self.move_base_client.send_goal(goal)
-        finished = self.move_base_client.wait_for_result(rospy.Duration(self.waypoint_timeout))
 
-        if not finished:
-            self.move_base_client.cancel_goal()
-            rospy.logwarn("move_base timed out reaching (%.2f, %.2f)", x, y)
-            return False
+        # Poll for move_base success OR proximity to target
+        rate = rospy.Rate(10)
+        deadline = rospy.Time.now() + rospy.Duration(self.waypoint_timeout)
 
-        state = self.move_base_client.get_state()
-        if state == actionlib.GoalStatus.SUCCEEDED:
-            return True
-        else:
-            rospy.logwarn("move_base failed for (%.2f, %.2f) -- state %d", x, y, state)
-            return False
+        while not rospy.is_shutdown() and rospy.Time.now() < deadline:
+            state = self.move_base_client.get_state()
+
+            if state == actionlib.GoalStatus.SUCCEEDED:
+                rospy.loginfo("move_base reported SUCCEEDED for (%.2f, %.2f)", x, y)
+                return True
+
+            if state in (actionlib.GoalStatus.ABORTED,
+                         actionlib.GoalStatus.REJECTED,
+                         actionlib.GoalStatus.PREEMPTED):
+                # Even on abort, check proximity before giving up
+                pose = self.get_robot_pose()
+                if pose is not None:
+                    dist = math.sqrt((pose[0] - x) ** 2 + (pose[1] - y) ** 2)
+                    if dist <= self.xy_goal_tolerance:
+                        rospy.loginfo("Proximity capture: robot %.2fm from (%.2f, %.2f) after state %d",
+                                      dist, x, y, state)
+                        self.move_base_client.cancel_goal()
+                        return True
+                rospy.logwarn("move_base failed for (%.2f, %.2f) -- state %d", x, y, state)
+                return False
+
+            # Proximity check while goal is still active
+            pose = self.get_robot_pose()
+            if pose is not None:
+                dist = math.sqrt((pose[0] - x) ** 2 + (pose[1] - y) ** 2)
+                if dist <= self.xy_goal_tolerance:
+                    rospy.loginfo("Proximity capture: robot %.2fm from (%.2f, %.2f) -- cancelling goal",
+                                  dist, x, y)
+                    self.move_base_client.cancel_goal()
+                    return True
+
+            rate.sleep()
+
+        # Timeout — final proximity check before failing
+        pose = self.get_robot_pose()
+        if pose is not None:
+            dist = math.sqrt((pose[0] - x) ** 2 + (pose[1] - y) ** 2)
+            if dist <= self.xy_goal_tolerance:
+                rospy.loginfo("Proximity capture on timeout: robot %.2fm from (%.2f, %.2f)", dist, x, y)
+                self.move_base_client.cancel_goal()
+                return True
+
+        self.move_base_client.cancel_goal()
+        rospy.logwarn("move_base timed out reaching (%.2f, %.2f)", x, y)
+        return False
 
     def clear_costmaps(self):
         """Ask move_base to clear costmaps -- helps recover from stuck states."""
@@ -449,7 +490,7 @@ class CoveragePlanner:
         self.progress_pub.publish(String(data=msg))
 
     def run(self):
-        # Wait for gmapping to publish first /map and for costmap to populate
+        # Wait for gmapping to publish first /map and costmap to populate
         rospy.loginfo("Waiting 8s for SLAM map and costmap to initialize...")
         rospy.sleep(8.0)
 

@@ -15,8 +15,8 @@ DWAPlannerROS:
   acc_lim_theta: 3.0
 
   # Goal tolerances (relaxed for outdoor GPS/odom drift)
-  yaw_goal_tolerance: 0.4
-  xy_goal_tolerance: 0.35
+  yaw_goal_tolerance: 0.8
+  xy_goal_tolerance: 0.5
   latch_xy_goal_tolerance: true
 
   # Forward simulation (longer horizon for outdoor planning)
