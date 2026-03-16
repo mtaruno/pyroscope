@@ -320,6 +320,58 @@ class CoveragePlanner:
             return False
         return True
 
+    def snap_to_free_costmap(self, x, y, search_radius=0.6):
+        """Snap waypoint to nearest low-cost cell in the live costmap.
+        Uses costmap (not raw /map) so inflation and lidar updates are included.
+        Only snaps if the original position is above the cost threshold."""
+        if self.latest_costmap is None:
+            return x, y
+
+        center = self.world_to_costmap(x, y)
+        if center is None:
+            return x, y
+
+        mx, my = center
+        cost = self.costmap_cell(mx, my)
+
+        # Already free enough -- no snap needed
+        if cost is not None and 0 <= cost < self.waypoint_cost_threshold:
+            return x, y
+
+        res = self.latest_costmap.info.resolution
+        steps = int(math.ceil(search_radius / res))
+        best_x, best_y = None, None
+        best_cost = self.waypoint_cost_threshold
+        best_dist = float('inf')
+
+        for dx in range(-steps, steps + 1):
+            for dy in range(-steps, steps + 1):
+                dist = math.sqrt(dx * dx + dy * dy) * res
+                if dist > search_radius:
+                    continue
+                nx = mx + dx
+                ny = my + dy
+                c = self.costmap_cell(nx, ny)
+                if c is None or c < 0:
+                    continue
+                # Prefer lowest cost, then closest distance
+                if c < best_cost or (c == best_cost and dist < best_dist):
+                    best_cost = c
+                    best_dist = dist
+                    ox = self.latest_costmap.info.origin.position.x
+                    oy = self.latest_costmap.info.origin.position.y
+                    best_x = ox + (nx + 0.5) * res
+                    best_y = oy + (ny + 0.5) * res
+
+        if best_x is not None:
+            rospy.loginfo("Snapped waypoint (%.2f,%.2f)->(%.2f,%.2f) cost %d->%d dist %.2fm",
+                          x, y, best_x, best_y, cost if cost is not None else -1,
+                          best_cost, best_dist)
+            return best_x, best_y
+
+        rospy.logwarn("No free cell found within %.2fm of (%.2f,%.2f) -- skipping snap", search_radius, x, y)
+        return x, y
+
     def rotate_for_recovery(self, turn_direction):
         cmd = Twist()
         cmd.angular.z = turn_direction * abs(self.recovery_turn_speed)
@@ -554,6 +606,9 @@ class CoveragePlanner:
                 continue
 
             while waypoint_failures < self.max_waypoint_failures and not rospy.is_shutdown():
+                # Snap to nearest free costmap cell before each attempt (costmap is live)
+                x, y = self.snap_to_free_costmap(x, y)
+
                 rospy.loginfo("Waypoint %d/%d attempt %d/%d: (%.2f, %.2f)",
                               self.current_index + 1, len(self.waypoints),
                               waypoint_failures + 1, self.max_waypoint_failures, x, y)
