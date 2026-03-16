@@ -642,15 +642,26 @@ class CoveragePlanner:
         except Exception:
             rospy.logwarn("Could not clear costmaps")
 
-    def publish_progress(self):
-        """Publish current progress"""
-        total = len(self.waypoints)
-        done = min(self.current_index + 1, total)
+    def publish_progress(self, done=None, total=None):
+        """Publish processed waypoint progress."""
+        if total is None:
+            total = len(self.waypoints)
+        if done is None:
+            done = min(self.current_index, total)
         msg = "{}/{} waypoints ({}%)".format(
             done, total,
             int(100.0 * done / total) if total > 0 else 0
         )
         self.progress_pub.publish(String(data=msg))
+
+    def publish_capture_ready_window(self):
+        """Hold capture_ready=true through the dwell window so subscribers do not miss a single pulse."""
+        end_time = rospy.Time.now() + rospy.Duration(self.dwell_time)
+        rate = rospy.Rate(4)
+        while rospy.Time.now() < end_time and not rospy.is_shutdown():
+            self.capture_ready_pub.publish(Bool(data=True))
+            rate.sleep()
+        self.capture_ready_pub.publish(Bool(data=False))
 
     def clear_old_markers(self):
         """Delete all previous waypoint markers from RViz."""
@@ -744,6 +755,7 @@ class CoveragePlanner:
         self.publish_waypoint_markers()
 
         total = len(self.waypoints)
+        self.publish_progress(done=0, total=total)
         rospy.logwarn("=== STARTING COVERAGE MISSION: %d waypoints, area=%.1fx%.1f ===",
                       total, self.area_width, self.area_height)
 
@@ -765,6 +777,7 @@ class CoveragePlanner:
                     rospy.logwarn("SKIP waypoint %d/%d (%.2f, %.2f) -- blocked in costmap",
                                   i + 1, total, x, y)
                     skipped += 1
+                    self.publish_progress(done=waypoint_count + skipped, total=total)
                     continue
                 rospy.logwarn("Snapped waypoint %d/%d: (%.2f,%.2f) -> (%.2f,%.2f)",
                               i + 1, total, x, y, snapped_x, snapped_y)
@@ -772,7 +785,6 @@ class CoveragePlanner:
 
             rospy.logwarn(">>> Waypoint %d/%d: navigating to (%.2f, %.2f)",
                           i + 1, total, x, y)
-            self.publish_progress()
 
             attempt = 0
             reached = False
@@ -791,9 +803,7 @@ class CoveragePlanner:
             if reached:
                 rospy.logwarn("<<< REACHED waypoint %d/%d at (%.2f, %.2f) -- dwelling %.1fs",
                               i + 1, total, x, y, self.dwell_time)
-                self.capture_ready_pub.publish(Bool(data=True))
-                rospy.sleep(self.dwell_time)
-                self.capture_ready_pub.publish(Bool(data=False))
+                self.publish_capture_ready_window()
                 waypoint_count += 1
                 rospy.logwarn("    Captured %d/%d so far (%d skipped)",
                               waypoint_count, total, skipped)
@@ -802,12 +812,14 @@ class CoveragePlanner:
                               i + 1, total, x, y)
                 skipped += 1
 
+            self.publish_progress(done=waypoint_count + skipped, total=total)
+
         # Mission complete
         self.current_index = len(self.waypoints)
         rospy.logwarn("=== MISSION COMPLETE: %d reached, %d skipped, %d total ===",
                       waypoint_count, skipped, total)
         self.complete_pub.publish(Bool(data=True))
-        self.publish_progress()
+        self.publish_progress(done=total, total=total)
         self.publish_waypoint_markers()
 
         rospy.spin()

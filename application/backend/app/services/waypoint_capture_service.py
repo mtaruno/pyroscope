@@ -24,6 +24,7 @@ from app.services.ros_sensor_bridge import (
     is_ros_configured,
     start_ros_bridge,
     get_latest_from_ros,
+    get_coverage_progress,
     wait_for_next_capture_ready,
     clear_capture_ready_queue,
     save_live_rgb_to_file,
@@ -329,18 +330,29 @@ def get_capture_progress() -> dict:
         total_points = _capture_state.get("total_points")
         status = _capture_state.get("status") or "idle"
         last_capture_ready = _capture_state.get("last_capture_ready")
+    planner_progress = get_coverage_progress()
+    planner_done_points = int(planner_progress.get("done_points") or 0)
+    planner_total_points = planner_progress.get("total_points")
+    planner_percent = float(planner_progress.get("progress_percent") or 0.0)
     if scan_id is not None:
         captured_points = max(captured_points, _count_saved_waypoints(scan_id))
+    mission_total_points = planner_total_points or total_points
+    completed_points = max(captured_points, planner_done_points)
     progress_percent = 0.0
     if status == "completed":
         progress_percent = 100.0
-    elif total_points and total_points > 0:
-        progress_percent = min(100.0, (captured_points / total_points) * 100.0)
+    elif mission_total_points and mission_total_points > 0:
+        capture_percent = min(100.0, (captured_points / mission_total_points) * 100.0)
+        progress_percent = max(capture_percent, planner_percent)
     return {
         "scan_id": scan_id,
         "captured_points": captured_points,
-        "total_points": total_points,
+        "completed_points": completed_points,
+        "planner_points": planner_done_points,
+        "total_points": mission_total_points,
         "progress_percent": progress_percent,
         "status": status,
         "last_capture_ready": bool(last_capture_ready),
+        "planner_progress_percent": planner_percent,
+        "planner_progress_message": planner_progress.get("message"),
     }

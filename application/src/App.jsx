@@ -200,17 +200,22 @@ function App() {
       try {
         const progress = await apiClient.getMissionProgress()
         const nextCaptured = progress?.captured_points || 0
+        const nextCompleted = progress?.completed_points || nextCaptured
         const nextTotal = progress?.total_points || totalPoints || 0
         const nextPercent = progress?.progress_percent || 0
 
         setCapturedPoints(nextCaptured)
         setTotalPoints(nextTotal)
         setScanProgress(nextPercent)
-        setScanPhase(
-          nextTotal > 0
-            ? `Captured ${nextCaptured}/${nextTotal} points`
-            : `Captured ${nextCaptured} point(s)`
-        )
+        if (nextTotal > 0) {
+          setScanPhase(
+            nextCompleted > nextCaptured
+              ? `Completed ${nextCompleted}/${nextTotal} waypoints - Captured ${nextCaptured}`
+              : `Captured ${nextCaptured}/${nextTotal} points`
+          )
+        } else {
+          setScanPhase(`Captured ${nextCaptured} point(s)`)
+        }
 
         if (progress?.status === 'completed' && !finishHandledRef.current) {
           const finishedScanId = activeScanId
@@ -1033,4 +1038,3 @@ function App() {
 }
 
 export default App
-

@@ -14,6 +14,13 @@ function ScanResults({ scanData, onBack }) {
   const [showSamples, setShowSamples] = useState(true)
   const [loadingSamples, setLoadingSamples] = useState(false)
 
+  useEffect(() => {
+    setPointData(null)
+    setSamplesData(null)
+    setLoadingPoints(false)
+    setLoadingSamples(false)
+  }, [scanId])
+
   // Load point-level data when toggled
   useEffect(() => {
     const loadPointData = async () => {
@@ -402,4 +409,3 @@ function getRiskLevel(riskValue) {
 }
 
 export default ScanResults
-

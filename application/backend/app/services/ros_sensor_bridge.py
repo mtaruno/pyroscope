@@ -16,6 +16,7 @@ Waypoint capture service handles its own disk saves for scan records.
 import io
 import os
 import logging
+import re
 import threading
 from typing import Optional, Dict, Any
 
@@ -39,7 +40,12 @@ _ros_cache: Dict[str, Any] = {
     "voltage": None,
     "battery_percent": None,
     "capture_ready_queue": [],
+    "capture_ready_active": False,
     "coverage_complete": threading.Event(),  # set when /coverage/complete=true received
+    "coverage_progress_message": None,
+    "coverage_done_points": 0,
+    "coverage_total_points": None,
+    "coverage_percent": 0.0,
     "bridge_ready": threading.Event(),
     "bridge_error": None,
     "lock": threading.Lock(),
@@ -100,7 +106,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
     """Run rospy node and subscribe to sensor topics; update _ros_cache."""
     try:
         import rospy
-        from std_msgs.msg import Float64, Float32, Bool
+        from std_msgs.msg import Float64, Float32, Bool, String
         from sensor_msgs.msg import Image
     except ImportError as e:
         _ros_cache["bridge_error"] = str(e)
@@ -251,16 +257,34 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
                 _rgb_logged[0] = True
 
     def cb_capture_ready(msg):
-        if msg.data is not True:
-            return
         with _ros_cache["capture_ready_condition"]:
-            _ros_cache["capture_ready_queue"].append(True)
-            _ros_cache["capture_ready_condition"].notify_all()
+            if msg.data is True:
+                if not _ros_cache["capture_ready_active"]:
+                    _ros_cache["capture_ready_queue"].append(True)
+                    _ros_cache["capture_ready_condition"].notify_all()
+                _ros_cache["capture_ready_active"] = True
+            else:
+                _ros_cache["capture_ready_active"] = False
 
     def cb_coverage_complete(msg):
         if msg.data is True:
             _ros_cache["coverage_complete"].set()
             logger.warning("Coverage mission complete signal received from planner")
+
+    def cb_coverage_progress(msg):
+        done_points = 0
+        total_points = None
+        percent = 0.0
+        match = re.match(r"^\s*(\d+)\s*/\s*(\d+)\s+waypoints\s+\((\d+)%\)\s*$", msg.data or "")
+        if match:
+            done_points = int(match.group(1))
+            total_points = int(match.group(2))
+            percent = float(match.group(3))
+        with _ros_cache["lock"]:
+            _ros_cache["coverage_progress_message"] = msg.data
+            _ros_cache["coverage_done_points"] = done_points
+            _ros_cache["coverage_total_points"] = total_points
+            _ros_cache["coverage_percent"] = percent
 
     def _set_voltage(voltage_value):
         with _ros_cache["lock"]:
@@ -289,6 +313,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
     rospy.Subscriber("/sensors/sht40/humidity", Float64, cb_hum, queue_size=1)
     rospy.Subscriber("/sensors/thermal/mean", Float64, cb_thermal_mean, queue_size=1)
     rospy.Subscriber("/coverage/capture_ready", Bool, cb_capture_ready, queue_size=50)
+    rospy.Subscriber("/coverage/progress", String, cb_coverage_progress, queue_size=10)
     rospy.Subscriber("/coverage/complete", Bool, cb_coverage_complete, queue_size=1)
     topic_types = {}
     try:
@@ -382,12 +407,28 @@ def clear_capture_ready_queue() -> None:
     condition = _ros_cache["capture_ready_condition"]
     with condition:
         _ros_cache["capture_ready_queue"].clear()
+        _ros_cache["capture_ready_active"] = False
     _ros_cache["coverage_complete"].clear()
+    with _ros_cache["lock"]:
+        _ros_cache["coverage_progress_message"] = None
+        _ros_cache["coverage_done_points"] = 0
+        _ros_cache["coverage_total_points"] = None
+        _ros_cache["coverage_percent"] = 0.0
 
 
 def is_coverage_complete() -> bool:
     """Return True if /coverage/complete=true has been received since last clear."""
     return _ros_cache["coverage_complete"].is_set()
+
+
+def get_coverage_progress() -> Dict[str, Any]:
+    with _ros_cache["lock"]:
+        return {
+            "message": _ros_cache["coverage_progress_message"],
+            "done_points": int(_ros_cache["coverage_done_points"] or 0),
+            "total_points": _ros_cache["coverage_total_points"],
+            "progress_percent": float(_ros_cache["coverage_percent"] or 0.0),
+        }
 
 
 def get_ros_bridge_error() -> Optional[str]:
