@@ -135,6 +135,13 @@ class ApiClient {
     });
   }
 
+  async sendTeleop(linearX, angularZ) {
+    return this.request('/robot/teleop', {
+      method: 'POST',
+      body: JSON.stringify({ linear_x: linearX, angular_z: angularZ }),
+    });
+  }
+
   async getMissionStatus() {
     return this.request('/robot/mission/status');
   }

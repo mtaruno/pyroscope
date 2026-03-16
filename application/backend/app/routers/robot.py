@@ -63,6 +63,39 @@ async def update_robot_status(
 
 
 # Mission Config and Endpoints - MUST come before /{robot_id}/status route
+class TeleopCommand(BaseModel):
+    linear_x: float = 0.0
+    angular_z: float = 0.0
+
+
+# Reusable clean env for ROS subprocess calls
+def _ros_clean_env():
+    return {
+        k: v for k, v in os.environ.items()
+        if k not in ('VIRTUAL_ENV', 'PYTHONHOME', 'PYTHONPATH', 'CONDA_DEFAULT_ENV')
+    }
+
+
+@router.post("/teleop")
+async def send_teleop_command(cmd: TeleopCommand):
+    """Publish a Twist message to /cmd_vel for manual teleop control."""
+    linear_x = max(-0.45, min(0.45, cmd.linear_x))
+    angular_z = max(-2.0, min(2.0, cmd.angular_z))
+    twist_yaml = (
+        "'{linear: {x: %.3f, y: 0, z: 0}, angular: {x: 0, y: 0, z: %.3f}}'"
+        % (linear_x, angular_z)
+    )
+    ros_cmd = (
+        'source /opt/ros/melodic/setup.bash && '
+        'rostopic pub -1 /cmd_vel geometry_msgs/Twist %s' % twist_yaml
+    )
+    try:
+        subprocess.Popen(['bash', '-c', ros_cmd], env=_ros_clean_env())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to send teleop: %s" % str(e))
+    return {"status": "ok", "linear_x": linear_x, "angular_z": angular_z}
+
+
 class MissionConfig(BaseModel):
     area_size_m: float = 50.0
     sampling_precision_m: float = 5.0

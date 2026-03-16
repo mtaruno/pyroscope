@@ -1,0 +1,73 @@
+.teleop-pad {
+  background: var(--color-surface, #1a1a2e);
+  border-radius: 12px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.teleop-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-text-primary, #e0e0e0);
+}
+
+.teleop-hint {
+  font-size: 11px;
+  color: var(--color-text-secondary, #888);
+}
+
+.teleop-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.teleop-row {
+  display: flex;
+  gap: 4px;
+  justify-content: center;
+}
+
+.teleop-spacer {
+  width: 48px;
+  height: 48px;
+}
+
+.teleop-btn {
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--color-border, #333);
+  border-radius: 8px;
+  background: var(--color-surface-alt, #2a2a3e);
+  color: var(--color-text-primary, #e0e0e0);
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, transform 0.05s;
+}
+
+.teleop-btn:hover {
+  background: var(--color-surface-hover, #3a3a4e);
+}
+
+.teleop-btn.active {
+  background: var(--color-primary, #4a90d9);
+  transform: scale(0.95);
+}
+
+.teleop-stop {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ff4444;
+  border-color: #ff4444;
+}
+
+.teleop-stop:hover {
+  background: rgba(255, 68, 68, 0.2);
+}

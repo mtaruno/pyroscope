@@ -5,6 +5,7 @@ import DataLog from './components/DataLog'
 import ScanResults from './components/ScanResults'
 import SensorPanel from './components/SensorPanel'
 import ScanConfigModal from './components/ScanConfigModal'
+import TeleopPad from './components/TeleopPad'
 import apiClient from './services/api'
 import './App.css'
 
@@ -832,6 +833,7 @@ function App() {
           onMarkerClick={handleMarkerClick}
         />
         <SensorPanel expanded={isScanning} />
+        {!isScanning && <TeleopPad />}
         {isScanning && (
           <section className="latest-capture-panel" aria-label="Latest capture">
             <h3 className="latest-capture-title">Latest capture</h3>
