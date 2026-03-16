@@ -104,6 +104,9 @@ rostopic echo /coverage/complete
 rosnode list
 ```
 
+## Code Style Rules
+- **Python 2 only** — `coverage_planner.py` runs on ROS Melodic (Python 2). Never use non-ASCII characters (em-dashes `—`, curly quotes, etc.) in comments or strings. Python 2 will throw `SyntaxError: Non-ASCII character '\xe2'` at startup. Use plain ASCII only: `--` instead of `—`, straight quotes only.
+
 ## Common Failure Modes
 | Symptom | Cause | Fix |
 |---------|-------|-----|

@@ -456,7 +456,7 @@ class CoveragePlanner:
 
             rate.sleep()
 
-        # Timeout — final proximity check before failing
+        # Timeout: final proximity check before failing
         pose = self.get_robot_pose()
         if pose is not None:
             dist = math.sqrt((pose[0] - x) ** 2 + (pose[1] - y) ** 2)
