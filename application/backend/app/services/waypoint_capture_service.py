@@ -29,6 +29,7 @@ from app.services.ros_sensor_bridge import (
     save_live_rgb_to_file,
     save_live_thermal_to_file,
     get_ros_bridge_error,
+    is_coverage_complete,
 )
 
 
@@ -123,6 +124,17 @@ def _count_saved_waypoints(scan_id: int) -> int:
         db.close()
 
 
+def _mark_capture_completed(scan_id: int) -> None:
+    saved_count = _count_saved_waypoints(scan_id)
+    with _capture_state_lock:
+        _capture_state["captured_points"] = max(
+            int(_capture_state.get("captured_points") or 0),
+            saved_count,
+        )
+        _capture_state["status"] = "completed"
+    _mark_scan_completed(scan_id)
+
+
 def _capture_loop_impl(scan_id: int):
     stop_event = _capture_state["stop_event"]
     if not stop_event:
@@ -149,6 +161,11 @@ def _capture_loop_impl(scan_id: int):
             if poll_count % 20 == 0:
                 print("[CAPTURE] still waiting for capture_ready (poll #%d, seq=%d)" % (poll_count, sequence_index), flush=True)
             if not capture_ready:
+                if is_coverage_complete():
+                    print("[CAPTURE] coverage_complete RECEIVED at seq=%d" % sequence_index, flush=True)
+                    _mark_capture_completed(scan_id)
+                    stop_event.set()
+                    break
                 continue
             poll_count = 0
             print("[CAPTURE] capture_ready RECEIVED for waypoint %d" % sequence_index, flush=True)
@@ -242,9 +259,7 @@ def _capture_loop_impl(scan_id: int):
             total_points = _capture_state["total_points"]
         sequence_index += 1
         if total_points and sequence_index >= total_points:
-            with _capture_state_lock:
-                _capture_state["status"] = "completed"
-            _mark_scan_completed(scan_id)
+            _mark_capture_completed(scan_id)
             stop_event.set()
             break
 
@@ -317,7 +332,9 @@ def get_capture_progress() -> dict:
     if scan_id is not None:
         captured_points = max(captured_points, _count_saved_waypoints(scan_id))
     progress_percent = 0.0
-    if total_points and total_points > 0:
+    if status == "completed":
+        progress_percent = 100.0
+    elif total_points and total_points > 0:
         progress_percent = min(100.0, (captured_points / total_points) * 100.0)
     return {
         "scan_id": scan_id,
