@@ -428,6 +428,10 @@ function App() {
       }, {
         signal: timeoutController.signal
       })
+      const estimation = response?.fuel_estimation
+      if (!estimation || estimation.total_fuel_load == null) {
+        throw new Error('Fuel API returned no estimation result.')
+      }
 
       clearFuelProgressTicker()
       clearTimeout(timeoutHandle)

@@ -79,16 +79,22 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
     const thermalNormalize = (value) => {
         if (!Number.isFinite(value)) return 0
 
-        const THERMAL_FLOOR = 60
-        const THERMAL_CEILING = 170
-        const THERMAL_EXPONENT = 3.5
+        const THERMAL_MAX = 150
+        const THERMAL_BLUE_CUTOFF = 140
+        const THERMAL_MIN = 40
+        const THERMAL_EXPONENT = 2.8
 
-        // Saturate everything above 170 into one top bucket.
-        const clipped = Math.max(THERMAL_FLOOR, Math.min(THERMAL_CEILING, value))
-        const base = (clipped - THERMAL_FLOOR) / (THERMAL_CEILING - THERMAL_FLOOR)
+        // >=140 keeps the same blue bucket.
+        if (value >= THERMAL_BLUE_CUTOFF) return 0
+        // <=40 is saturated to pure red.
+        if (value <= THERMAL_MIN) return 1
 
-        // Strongly compress the upper-mid range so 170..110 stays visually close.
-        return 1 - Math.pow(1 - base, THERMAL_EXPONENT)
+        // Clamp to 150..40 working interval.
+        const clamped = Math.max(THERMAL_MIN, Math.min(THERMAL_MAX, value))
+        // As value drops from 140 -> 40, normalized rises from 0 -> 1.
+        const linear = (THERMAL_BLUE_CUTOFF - clamped) / (THERMAL_BLUE_CUTOFF - THERMAL_MIN)
+        // Exponential rise for stronger separation near the hotter target band.
+        return Math.pow(linear, THERMAL_EXPONENT)
     }
 
     // Layer definitions with value extractors for interpolated heatmap

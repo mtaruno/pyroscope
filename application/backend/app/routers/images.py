@@ -85,12 +85,17 @@ async def upload_image(
     fuel_estimation = None
     if estimate_fuel:
         fuel_estimation = image_service.estimate_fuel_for_scan(db, scan_id)
+        if not fuel_estimation.get("success"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=fuel_estimation.get("error", "Fuel estimation failed"),
+            )
 
     return ImageUploadResponse(
         image_id=scan_image.id,
         file_path=file_info["file_path"],
         url=f"/api/images/{scan_image.id}",
-        fuel_estimation=fuel_estimation if fuel_estimation and fuel_estimation.get("success") else None,
+        fuel_estimation=fuel_estimation,
     )
 
 
