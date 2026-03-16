@@ -592,6 +592,18 @@ class CoveragePlanner:
         else:
             rospy.logwarn("Costmap not ready after 30s -- starting anyway")
 
+        # Re-centre waypoints on actual robot position in map frame
+        pose = self.get_robot_pose()
+        if pose is not None:
+            rospy.loginfo("Robot pose in map frame: (%.2f, %.2f) -- recentring waypoints", pose[0], pose[1])
+            self.origin_x = pose[0]
+            self.origin_y = pose[1]
+            self.generate_waypoints()
+            self.validate_waypoint_distances()
+        else:
+            rospy.logwarn("Could not get robot pose -- using origin_x=%.2f origin_y=%.2f from params",
+                          self.origin_x, self.origin_y)
+
         self.publish_waypoint_markers()
         rospy.loginfo("Starting coverage mission!")
 
