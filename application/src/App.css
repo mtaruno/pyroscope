@@ -16,26 +16,6 @@
   height: 100vh;
 }
 
-.sensor-teleop-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 1.5rem;
-}
-
-.sensor-teleop-main {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
-.sensor-teleop-main .sensor-panel {
-  margin-bottom: 0;
-}
-
-.sensor-teleop-side {
-  flex: 0 0 280px;
-}
-
 .latest-capture-panel {
   flex-shrink: 0;
   margin-bottom: 12px;
@@ -343,6 +323,35 @@
   font-size: 0.88rem;
 }
 
+.teleop-launcher {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: #0f172a;
+  color: #f8fafc;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  z-index: 1200;
+}
+
+.teleop-toast {
+  width: 340px;
+}
+
+.teleop-toast.collapsed {
+  width: 230px;
+}
+
+.teleop-toast-body {
+  padding: 12px;
+}
+
 @media (max-width: 1024px) {
   .dashboard {
     flex-direction: column;
@@ -350,14 +359,5 @@
   
   .main-content {
     padding: 12px;
-  }
-
-  .sensor-teleop-row {
-    flex-direction: column;
-  }
-
-  .sensor-teleop-side {
-    flex: 1 1 auto;
-    width: 100%;
   }
 }

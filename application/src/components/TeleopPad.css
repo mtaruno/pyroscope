@@ -9,6 +9,13 @@
   min-width: 260px;
 }
 
+.teleop-pad.embedded {
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  min-width: 0;
+}
+
 .teleop-header {
   display: flex;
   align-items: center;
@@ -34,7 +41,8 @@
 
 .teleop-hint,
 .teleop-shortcuts,
-.teleop-status {
+.teleop-status,
+.teleop-boost {
   font-size: 11px;
   line-height: 1.4;
 }
@@ -44,9 +52,14 @@
   color: var(--color-text-secondary, #888);
 }
 
-.teleop-status {
+.teleop-status,
+.teleop-boost {
   color: var(--color-text-primary, #dfe6f6);
   font-variant-numeric: tabular-nums;
+}
+
+.teleop-boost {
+  color: #93c5fd;
 }
 
 .teleop-speed-panel {

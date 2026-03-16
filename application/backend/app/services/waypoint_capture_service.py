@@ -144,26 +144,9 @@ def _store_capture_images(
     thermal_image_path: Optional[str],
     rgb_waypoint_path: Optional[str],
 ) -> None:
-    db = SessionLocal()
-    try:
-        if thermal_image_path and os.path.exists(thermal_image_path):
-            existing = db.query(ScanImage).filter(
-                ScanImage.scan_id == scan_id,
-                ScanImage.image_type == ImageType.thermal_latest,
-            ).first()
-            if existing:
-                existing.file_path = thermal_image_path
-                existing.captured_at = captured_at
-            else:
-                db.add(ScanImage(
-                    scan_id=scan_id,
-                    image_type=ImageType.thermal_latest,
-                    file_path=thermal_image_path,
-                    mime_type="image/jpeg",
-                    captured_at=captured_at,
-                ))
-
-        if rgb_waypoint_path and os.path.exists(rgb_waypoint_path):
+    if rgb_waypoint_path and os.path.exists(rgb_waypoint_path):
+        db = SessionLocal()
+        try:
             rgb_image = ScanImage(
                 scan_id=scan_id,
                 image_type=ImageType.visible,
@@ -181,12 +164,37 @@ def _store_capture_images(
             if sample:
                 sample.rgb_image_id = rgb_image.id
 
-        db.commit()
-    except Exception as e:
-        logger.error("Failed to save capture images for waypoint %d: %s", sequence_index, e, exc_info=True)
-        db.rollback()
-    finally:
-        db.close()
+            db.commit()
+        except Exception as e:
+            logger.error("Failed to save RGB image for waypoint %d: %s", sequence_index, e, exc_info=True)
+            db.rollback()
+        finally:
+            db.close()
+
+    if thermal_image_path and os.path.exists(thermal_image_path):
+        db = SessionLocal()
+        try:
+            existing = db.query(ScanImage).filter(
+                ScanImage.scan_id == scan_id,
+                ScanImage.image_type == ImageType.thermal_latest,
+            ).first()
+            if existing:
+                existing.file_path = thermal_image_path
+                existing.captured_at = captured_at
+            else:
+                db.add(ScanImage(
+                    scan_id=scan_id,
+                    image_type=ImageType.thermal_latest,
+                    file_path=thermal_image_path,
+                    mime_type="image/jpeg",
+                    captured_at=captured_at,
+                ))
+            db.commit()
+        except Exception as e:
+            logger.error("Failed to save thermal image for waypoint %d: %s", sequence_index, e, exc_info=True)
+            db.rollback()
+        finally:
+            db.close()
 
 
 def _capture_loop_impl(scan_id: int):

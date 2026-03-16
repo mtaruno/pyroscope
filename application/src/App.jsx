@@ -61,6 +61,8 @@ function App() {
   const [fuelUseLocalPhoto, setFuelUseLocalPhoto] = useState(false)
   const [fuelLocalFile, setFuelLocalFile] = useState(null)
   const [fuelPromptError, setFuelPromptError] = useState('')
+  const [teleopVisible, setTeleopVisible] = useState(false)
+  const [teleopCollapsed, setTeleopCollapsed] = useState(false)
   const [fuelTask, setFuelTask] = useState({
     visible: false,
     collapsed: false,
@@ -242,6 +244,13 @@ function App() {
       clearFuelProgressTicker()
     }
   }, [])
+
+  useEffect(() => {
+    if (isScanning) {
+      setTeleopVisible(false)
+      setTeleopCollapsed(false)
+    }
+  }, [isScanning])
 
   // Poll latest waypoint capture while scanning
   useEffect(() => {
@@ -832,18 +841,7 @@ function App() {
           onScanTargetChange={handleScanTargetChange}
           onMarkerClick={handleMarkerClick}
         />
-        {!isScanning ? (
-          <div className="sensor-teleop-row">
-            <div className="sensor-teleop-main">
-              <SensorPanel expanded={isScanning} />
-            </div>
-            <div className="sensor-teleop-side">
-              <TeleopPad />
-            </div>
-          </div>
-        ) : (
-          <SensorPanel expanded={isScanning} />
-        )}
+        <SensorPanel expanded={isScanning} />
         {isScanning && (
           <section className="latest-capture-panel" aria-label="Latest capture">
             <h3 className="latest-capture-title">Latest capture</h3>
@@ -1041,6 +1039,49 @@ function App() {
                 </div>
                 )
               )}
+            </div>
+          )}
+        </aside>
+      )}
+      {!isScanning && !teleopVisible && (
+        <button
+          className="teleop-launcher"
+          onClick={() => {
+            setTeleopVisible(true)
+            setTeleopCollapsed(false)
+          }}
+        >
+          Manual Control
+        </button>
+      )}
+      {!isScanning && teleopVisible && (
+        <aside className={`fuel-task-toast teleop-toast ${teleopCollapsed ? 'collapsed' : ''}`}>
+          <div className="fuel-task-header">
+            <div>
+              <strong>Manual Control</strong>
+              <div className="fuel-task-status running">Keyboard + on-screen teleop</div>
+            </div>
+            <div className="fuel-task-header-actions">
+              <button
+                className="fuel-task-mini-btn"
+                onClick={() => setTeleopCollapsed((prev) => !prev)}
+              >
+                {teleopCollapsed ? 'Expand' : 'Collapse'}
+              </button>
+              <button
+                className="fuel-task-mini-btn close"
+                onClick={() => {
+                  setTeleopVisible(false)
+                  setTeleopCollapsed(false)
+                }}
+              >
+                x
+              </button>
+            </div>
+          </div>
+          {!teleopCollapsed && (
+            <div className="fuel-task-body teleop-toast-body">
+              <TeleopPad embedded />
             </div>
           )}
         </aside>
