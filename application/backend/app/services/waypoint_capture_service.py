@@ -138,18 +138,27 @@ def _capture_loop_impl(scan_id: int):
     use_ros = _capture_state.get("use_ros", False)
     simulate = not use_ros and not _sht40_script.exists()
 
+    logger.warning("Capture loop started: scan_id=%d, use_ros=%s", scan_id, use_ros)
+    poll_count = 0
     while not stop_event.is_set():
         capture_ready = wait_for_next_capture_ready(timeout_sec=0.5) if use_ros else False
         if stop_event.is_set():
             break
         if use_ros:
+            poll_count += 1
+            if poll_count % 20 == 0:
+                logger.warning("capture loop: still waiting for capture_ready (poll #%d, seq=%d)",
+                               poll_count, sequence_index)
             if not capture_ready:
                 continue
+            poll_count = 0
             logger.warning("capture_ready trigger received for waypoint %d", sequence_index)
             with _capture_state_lock:
                 _capture_state["last_capture_ready"] = True
         else:
             # Keep legacy behavior when ROS command stream is unavailable.
+            logger.warning("Fallback capture (no ROS): waiting %ds for waypoint %d",
+                           FALLBACK_INTERVAL_SEC, sequence_index)
             stop_event.wait(FALLBACK_INTERVAL_SEC)
             if stop_event.is_set():
                 break
@@ -220,14 +229,15 @@ def _capture_loop_impl(scan_id: int):
                 sample.rgb_image_id = rgb_image.id
 
             db.commit()
-            logger.warning("Waypoint %d saved: temp=%s, humidity=%s, thermal=%s, rgb=%s",
-                           sequence_index,
+            with _capture_state_lock:
+                _capture_state["captured_points"] = sequence_index + 1
+                current_count = _capture_state["captured_points"]
+            logger.warning("SAVED waypoint %d (captured_points=%d): temp=%s, humidity=%s, thermal=%s, rgb=%s",
+                           sequence_index, current_count,
                            sht40_data.get("temperature"),
                            sht40_data.get("humidity"),
                            thermal_data.get("thermal_mean"),
                            rgb_waypoint_path)
-            with _capture_state_lock:
-                _capture_state["captured_points"] = sequence_index + 1
         except Exception as e:
             logger.error("Failed to save waypoint %d: %s", sequence_index, e, exc_info=True)
             db.rollback()
@@ -259,10 +269,12 @@ def start_capture_loop(scan_id: int, total_points: Optional[int] = None) -> None
     rgb_dir = os.path.join(settings.UPLOAD_DIR, "realsense_latest")
     os.makedirs(thermal_dir, exist_ok=True)
     os.makedirs(rgb_dir, exist_ok=True)
-    use_ros = is_ros_configured() and start_ros_bridge(thermal_dir, rgb_dir)
+    ros_configured = is_ros_configured()
+    use_ros = ros_configured and start_ros_bridge(thermal_dir, rgb_dir)
     clear_capture_ready_queue()
-    logger.warning("Starting capture loop: scan_id=%d, total_points=%s, use_ros=%s", scan_id, total_points, use_ros)
-    if is_ros_configured() and not use_ros:
+    logger.warning("Starting capture loop: scan_id=%d, total_points=%s, ros_configured=%s, use_ros=%s",
+                   scan_id, total_points, ros_configured, use_ros)
+    if ros_configured and not use_ros:
         logger.error("ROS is configured but waypoint capture bridge did not start: %s", get_ros_bridge_error())
     _capture_state["use_ros"] = use_ros
     _capture_state["stop_event"] = threading.Event()
