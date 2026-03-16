@@ -832,8 +832,18 @@ function App() {
           onScanTargetChange={handleScanTargetChange}
           onMarkerClick={handleMarkerClick}
         />
-        <SensorPanel expanded={isScanning} />
-        {!isScanning && <TeleopPad />}
+        {!isScanning ? (
+          <div className="sensor-teleop-row">
+            <div className="sensor-teleop-main">
+              <SensorPanel expanded={isScanning} />
+            </div>
+            <div className="sensor-teleop-side">
+              <TeleopPad />
+            </div>
+          </div>
+        ) : (
+          <SensorPanel expanded={isScanning} />
+        )}
         {isScanning && (
           <section className="latest-capture-panel" aria-label="Latest capture">
             <h3 className="latest-capture-title">Latest capture</h3>
