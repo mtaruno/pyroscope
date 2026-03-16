@@ -66,7 +66,7 @@ class CoveragePlanner:
         self.latest_costmap = None
         self.latest_costmap_stamp = None
         self.latest_map = None  # raw SLAM /map (0=free, 100=occupied, -1=unknown)
-        self.goal_frame = "odom"  # updated to "map" in run() if SLAM is available
+        self.goal_frame = "odom"  # updated in run() to match the pose frame we can actually resolve
         self.visited_positions = []  # list of (x, y) where we already captured
         self.mission_start_x = 0.0
         self.mission_start_y = 0.0
@@ -139,17 +139,19 @@ class CoveragePlanner:
     def validate_waypoint_costmap(self, x, y):
         """Check if waypoint is in free space on the live costmap.
         Returns True if free (cost < threshold), False if blocked or unknown."""
-        if self.latest_costmap is None:
+        if not self.can_validate_against_costmap():
             return True  # no costmap yet, trust the grid
 
         coords = self.world_to_costmap(x, y)
         if coords is None:
-            return True  # outside costmap bounds, let move_base handle it
+            rospy.logwarn("Waypoint (%.2f, %.2f) is outside global costmap bounds", x, y)
+            return False
 
         mx, my = coords
         cost = self.costmap_cell(mx, my)
         if cost is None:
-            return True
+            rospy.logwarn("Waypoint (%.2f, %.2f) resolved to an invalid costmap cell", x, y)
+            return False
 
         if cost < 0 or cost >= self.waypoint_cost_threshold:
             rospy.logwarn("Waypoint (%.2f, %.2f) blocked: cost=%d >= threshold=%d",
@@ -197,18 +199,45 @@ class CoveragePlanner:
     def stop_robot(self):
         self.cmd_vel_pub.publish(Twist())
 
+    def get_robot_pose_in_frame(self, frame):
+        try:
+            common_time = self.tf_listener.getLatestCommonTime(frame, 'base_link')
+            trans, rot = self.tf_listener.lookupTransform(frame, 'base_link', rospy.Time(0))
+            yaw = tf.transformations.euler_from_quaternion(rot)[2]
+            pose_age = abs((rospy.Time.now() - common_time).to_sec())
+            return (trans[0], trans[1], yaw, pose_age)
+        except (tf.Exception, tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+            return None
+
     def get_robot_pose(self):
         # Prefer map frame (SLAM-corrected); fall back to odom if map not yet available
         for frame in ('map', 'odom'):
-            try:
-                common_time = self.tf_listener.getLatestCommonTime(frame, 'base_link')
-                trans, rot = self.tf_listener.lookupTransform(frame, 'base_link', rospy.Time(0))
-                yaw = tf.transformations.euler_from_quaternion(rot)[2]
-                pose_age = abs((rospy.Time.now() - common_time).to_sec())
-                return (trans[0], trans[1], yaw, pose_age)
-            except (tf.Exception, tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-                continue
+            pose = self.get_robot_pose_in_frame(frame)
+            if pose is not None:
+                return pose
         return None
+
+    def can_validate_against_costmap(self):
+        if self.latest_costmap is None:
+            return False
+        frame_id = self.latest_costmap.header.frame_id or "map"
+        return frame_id == self.goal_frame
+
+    def can_validate_against_map(self):
+        return self.latest_map is not None and self.goal_frame == "map"
+
+    def wait_for_navigation_grid(self, timeout):
+        """Wait briefly for the initial map/costmap message in the goal frame."""
+        if self.goal_frame != "map":
+            return False
+
+        deadline = rospy.Time.now() + rospy.Duration(timeout)
+        rate = rospy.Rate(10)
+        while rospy.Time.now() < deadline and not rospy.is_shutdown():
+            if self.can_validate_against_map() or self.can_validate_against_costmap():
+                return True
+            rate.sleep()
+        return False
 
     def wait_for_fresh_pose(self, timeout):
         deadline = rospy.Time.now() + rospy.Duration(timeout)
@@ -288,12 +317,14 @@ class CoveragePlanner:
 
     def waypoint_cost_invalid(self, x, y):
         costmap_age = self.get_costmap_age()
-        if self.latest_costmap is None or costmap_age is None or costmap_age > self.costmap_stale_timeout:
+        if (not self.can_validate_against_costmap() or
+                costmap_age is None or costmap_age > self.costmap_stale_timeout):
             return False
 
         center = self.world_to_costmap(x, y)
         if center is None:
-            return False
+            rospy.logwarn("Skipping waypoint (%.2f, %.2f): outside global costmap bounds", x, y)
+            return True
 
         mx, my = center
         radius_cells = int(math.ceil(self.waypoint_validation_radius / self.latest_costmap.info.resolution))
@@ -341,12 +372,47 @@ class CoveragePlanner:
 
         return False
 
+    def waypoint_map_invalid(self, x, y):
+        if not self.can_validate_against_map():
+            return False
+
+        value = self.map_cell_value(x, y)
+        if value is None:
+            rospy.logwarn("Skipping waypoint (%.2f, %.2f): outside /map bounds", x, y)
+            return True
+        if value != 0:
+            rospy.logwarn("Skipping waypoint (%.2f, %.2f): /map occupancy=%d", x, y, value)
+            return True
+        return False
+
     def waypoint_is_valid(self, x, y):
+        if self.waypoint_map_invalid(x, y):
+            return False
         if self.waypoint_cost_invalid(x, y):
             return False
         if self.waypoint_scan_blocked(x, y):
             return False
         return True
+
+    def filter_waypoints_to_known_bounds(self, waypoints):
+        """Drop waypoints that are outside the current map/costmap frame or on occupied map cells."""
+        filtered = []
+        skipped = 0
+
+        for x, y in waypoints:
+            if self.waypoint_map_invalid(x, y):
+                skipped += 1
+                continue
+            if self.can_validate_against_costmap() and self.world_to_costmap(x, y) is None:
+                rospy.logwarn("Skipping waypoint (%.2f, %.2f): outside global costmap bounds", x, y)
+                skipped += 1
+                continue
+            filtered.append((x, y))
+
+        if skipped > 0:
+            rospy.logwarn("Filtered %d/%d waypoints outside known map/costmap bounds",
+                          skipped, len(waypoints))
+        return filtered
 
     def snap_to_free_costmap(self, x, y, search_radius=0.6):
         """Snap waypoint to nearest low-cost cell in the live costmap.
@@ -638,7 +704,14 @@ class CoveragePlanner:
             rospy.logwarn("TF not available after 30s -- using origin params")
 
         # Record mission start position
-        pose = self.get_robot_pose()
+        pose = self.get_robot_pose_in_frame('map')
+        if pose is not None:
+            self.goal_frame = 'map'
+        else:
+            pose = self.get_robot_pose_in_frame('odom')
+            if pose is not None:
+                self.goal_frame = 'odom'
+
         if pose is not None:
             self.mission_start_x = pose[0]
             self.mission_start_y = pose[1]
@@ -650,9 +723,13 @@ class CoveragePlanner:
             rospy.logwarn("Cannot get pose -- using origin (%.2f, %.2f)",
                           self.origin_x, self.origin_y)
 
-        # Generate fixed lawnmower grid in map frame
+        if self.goal_frame == 'map' and not self.wait_for_navigation_grid(5.0):
+            rospy.logwarn("No /map or global costmap received within 5s -- generating unclipped grid")
+
+        # Generate fixed lawnmower grid in the active goal frame
         self.waypoints = self.generate_lawnmower_waypoints(
             self.mission_start_x, self.mission_start_y)
+        self.waypoints = self.filter_waypoints_to_known_bounds(self.waypoints)
 
         if not self.waypoints:
             rospy.logwarn("No waypoints generated -- check area/spacing params")
