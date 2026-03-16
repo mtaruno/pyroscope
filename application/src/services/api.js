@@ -57,7 +57,7 @@ class ApiClient {
   }
 
   // Image Upload
-  async uploadImage(scanId, file, metadata) {
+  async uploadImage(scanId, file, metadata = {}, options = {}) {
     const formData = new FormData();
     formData.append('scan_id', scanId);
     formData.append('image_type', metadata.image_type || 'visible');
@@ -73,7 +73,8 @@ class ApiClient {
 
     const response = await fetch(`${API_BASE_URL}/images/upload`, {
       method: 'POST',
-      body: formData
+      body: formData,
+      signal: options.signal
     });
 
     if (!response.ok) {

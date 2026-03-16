@@ -84,8 +84,8 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
             icon: <Thermometer size={16} />,
             extractor: (point) => point.plant_temperature,
             unit: '°C',
-            minValue: 20,
-            maxValue: 45
+            minValue: 5,
+            maxValue: 15
         },
         {
             id: 'air_temp',
@@ -244,6 +244,10 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
                                 data={heatmapData.data_points}
                                 valueExtractor={currentLayer.extractor}
                                 opacity={0.75}
+                                minValueOverride={currentLayer.minValue}
+                                maxValueOverride={currentLayer.maxValue}
+                                colorIntensityMin={activeLayer === 'plant_temp' ? 50 : 0}
+                                colorIntensityMax={activeLayer === 'plant_temp' ? 200 : 255}
                             />
                             <BoundaryLayer dataPoints={heatmapData.data_points} />
                         </>

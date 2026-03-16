@@ -71,10 +71,13 @@ function App() {
     fileName: '',
     imageUrl: '',
     result: null,
-    error: ''
+    error: '',
+    noFuelDetected: false
   })
   const fuelProgressRef = useRef(null)
   const fuelProgressStartRef = useRef(0)
+  const FUEL_PROGRESS_CAP = 94
+  const FUEL_TIMEOUT_MS = 120000
 
   // Load scans from API on component mount
   useEffect(() => {
@@ -333,7 +336,7 @@ function App() {
     fuelProgressStartRef.current = Date.now()
     fuelProgressRef.current = setInterval(() => {
       const elapsed = Date.now() - fuelProgressStartRef.current
-      const progress = Math.min(94, (elapsed / 120000) * 94)
+      const progress = Math.min(FUEL_PROGRESS_CAP, (elapsed / FUEL_TIMEOUT_MS) * FUEL_PROGRESS_CAP)
       setFuelTask(prev => ({
         ...prev,
         progress,
@@ -405,10 +408,15 @@ function App() {
       fileName: fuelUseLocalPhoto ? (fuelLocalFile?.name || '') : 'latest_capture_from_scan',
       imageUrl: fuelUseLocalPhoto && fuelLocalFile ? URL.createObjectURL(fuelLocalFile) : '',
       result: null,
-      error: ''
+      error: '',
+      noFuelDetected: false
     })
 
     startFuelProgressTicker()
+    const timeoutController = new AbortController()
+    const timeoutHandle = setTimeout(() => {
+      timeoutController.abort()
+    }, FUEL_TIMEOUT_MS)
     try {
       const uploadFile = fuelUseLocalPhoto ? fuelLocalFile : await fetchLatestCaptureFile(fuelPromptScanId)
       if (!fuelUseLocalPhoto && uploadFile) {
@@ -417,9 +425,12 @@ function App() {
       const response = await apiClient.uploadImage(fuelPromptScanId, uploadFile, {
         image_type: 'visible',
         estimate_fuel: true
+      }, {
+        signal: timeoutController.signal
       })
 
       clearFuelProgressTicker()
+      clearTimeout(timeoutHandle)
       await completeFuelProgressFast()
 
       setFuelTask(prev => ({
@@ -428,10 +439,28 @@ function App() {
         progress: 100,
         stage: 'Fuel estimation completed.',
         elapsedMs: Date.now() - fuelProgressStartRef.current,
-        result: response
+        result: response,
+        noFuelDetected: false
       }))
+      loadAndShowScanResult(scanId)
     } catch (error) {
+      clearTimeout(timeoutHandle)
       clearFuelProgressTicker()
+      const isTimeoutAbort = error?.name === 'AbortError'
+      if (isTimeoutAbort) {
+        await completeFuelProgressFast()
+        setFuelTask(prev => ({
+          ...prev,
+          status: 'success',
+          progress: 100,
+          stage: 'No fuel detected within 2 minutes.',
+          elapsedMs: Date.now() - fuelProgressStartRef.current,
+          noFuelDetected: true,
+          result: null,
+          error: ''
+        }))
+        return
+      }
       setFuelTask(prev => ({
         ...prev,
         status: 'error',
@@ -591,7 +620,135 @@ function App() {
 
   // Show scan results page
   if (showResults && scanResultData) {
-    return <ScanResults scanData={scanResultData} onBack={handleBackFromResults} />
+    return (
+      <>
+        <ScanResults scanData={scanResultData} onBack={handleBackFromResults} />
+        {showFuelPromptModal && (
+          <div className="scan-modal-overlay" role="dialog" aria-modal="true">
+            <div className="scan-modal-content fuel-prompt-modal">
+              <h3>Run Fuel Load Estimation?</h3>
+              <p className="fuel-prompt-desc">
+                Scan #{fuelPromptScanId} {fuelPromptReason === 'completed' ? 'completed' : 'stopped'}.
+                {' '}Do you want to run fuel estimation now?
+              </p>
+
+              <label className="fuel-checkbox">
+                <input
+                  type="checkbox"
+                  checked={fuelUseLocalPhoto}
+                  onChange={(e) => {
+                    setFuelUseLocalPhoto(e.target.checked)
+                    setFuelPromptError('')
+                  }}
+                />
+                Use local photo
+              </label>
+
+              {fuelUseLocalPhoto ? (
+                <div className="fuel-file-input-wrap">
+                  <label htmlFor="fuel-local-file">Select local photo</label>
+                  <input
+                    id="fuel-local-file"
+                    type="file"
+                    accept="image/jpeg,image/png"
+                    onChange={(e) => {
+                      setFuelLocalFile(e.target.files?.[0] || null)
+                      setFuelPromptError('')
+                    }}
+                  />
+                </div>
+              ) : (
+                <p className="fuel-prompt-hint">
+                  The app will upload latest capture image from this scan.
+                </p>
+              )}
+
+              {fuelPromptError && <p className="fuel-prompt-error">{fuelPromptError}</p>}
+
+              <div className="scan-prompt-actions">
+                <button
+                  className="scan-prompt-btn scan-prompt-cancel"
+                  onClick={closeFuelPrompt}
+                >
+                  Skip
+                </button>
+                <button
+                  className="scan-prompt-btn scan-prompt-confirm"
+                  onClick={handleConfirmFuelPrompt}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {fuelTask.visible && (
+          <aside className={`fuel-task-toast ${fuelTask.collapsed ? 'collapsed' : ''}`}>
+            <div className="fuel-task-header">
+              <div>
+                <strong>Fuel Estimation</strong>
+                <div className={`fuel-task-status ${fuelTask.status}`}>
+                  {fuelTask.status === 'running' && 'Running...'}
+                  {fuelTask.status === 'success' && 'Completed'}
+                  {fuelTask.status === 'error' && 'Failed'}
+                </div>
+              </div>
+              <div className="fuel-task-header-actions">
+                <button
+                  className="fuel-task-mini-btn"
+                  onClick={() => setFuelTask(prev => ({ ...prev, collapsed: !prev.collapsed }))}
+                >
+                  {fuelTask.collapsed ? 'Expand' : 'Collapse'}
+                </button>
+                <button
+                  className="fuel-task-mini-btn close"
+                  onClick={() => setFuelTask(prev => ({ ...prev, visible: false }))}
+                >
+                  x
+                </button>
+              </div>
+            </div>
+            {!fuelTask.collapsed && (
+              <div className="fuel-task-body">
+                <div className="fuel-task-progress-wrap">
+                  <div className="fuel-task-progress-bar" style={{ width: `${Math.max(0, Math.min(100, fuelTask.progress))}%` }} />
+                </div>
+                <div className="fuel-task-meta">
+                  <span>{Math.round(fuelTask.progress)}%</span>
+                  <span>{Math.floor(fuelTask.elapsedMs / 1000)}s</span>
+                </div>
+                <p className="fuel-task-stage">{fuelTask.stage}</p>
+                {fuelTask.fileName && <p className="fuel-task-file">File: {fuelTask.fileName}</p>}
+
+                {fuelTask.imageUrl && (
+                  <img className="fuel-task-image" src={fuelTask.imageUrl} alt="Uploaded local sample" />
+                )}
+
+                {fuelTask.status === 'error' && (
+                  <p className="fuel-task-error">{fuelTask.error}</p>
+                )}
+
+                {fuelTask.status === 'success' && fuelTask.noFuelDetected && (
+                  <div className="fuel-task-results">
+                    <p><strong>No fuel detected.</strong></p>
+                  </div>
+                )}
+
+                {fuelTask.status === 'success' && !fuelTask.noFuelDetected && (
+                  <div className="fuel-task-results">
+                    <p>Total: <strong>{fuelTask.result?.fuel_estimation?.total_fuel_load ?? 'N/A'}</strong> tons/acre</p>
+                    <p>1-Hour: <strong>{fuelTask.result?.fuel_estimation?.one_hour_fuel ?? 'N/A'}</strong></p>
+                    <p>10-Hour: <strong>{fuelTask.result?.fuel_estimation?.ten_hour_fuel ?? 'N/A'}</strong></p>
+                    <p>100-Hour: <strong>{fuelTask.result?.fuel_estimation?.hundred_hour_fuel ?? 'N/A'}</strong></p>
+                    <p>Pine Cones: <strong>{fuelTask.result?.fuel_estimation?.pine_cone_count ?? 'N/A'}</strong></p>
+                  </div>
+                )}
+              </div>
+            )}
+          </aside>
+        )}
+      </>
+    )
   }
 
   return (
@@ -780,6 +937,11 @@ function App() {
               )}
 
               {fuelTask.status === 'success' && (
+                fuelTask.noFuelDetected ? (
+                  <div className="fuel-task-results">
+                    <p><strong>No fuel detected.</strong></p>
+                  </div>
+                ) : (
                 <div className="fuel-task-results">
                   <p>Total: <strong>{fuelTask.result?.fuel_estimation?.total_fuel_load ?? 'N/A'}</strong> tons/acre</p>
                   <p>1-Hour: <strong>{fuelTask.result?.fuel_estimation?.one_hour_fuel ?? 'N/A'}</strong></p>
@@ -787,6 +949,7 @@ function App() {
                   <p>100-Hour: <strong>{fuelTask.result?.fuel_estimation?.hundred_hour_fuel ?? 'N/A'}</strong></p>
                   <p>Pine Cones: <strong>{fuelTask.result?.fuel_estimation?.pine_cone_count ?? 'N/A'}</strong></p>
                 </div>
+                )
               )}
             </div>
           )}

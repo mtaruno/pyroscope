@@ -8,7 +8,11 @@ import L from 'leaflet';
  */
 
 // Color gradient function
-const getColorForValue = (value, min, max) => {
+const getColorForValue = (value, min, max, options = {}) => {
+  const {
+    colorIntensityMin = 0,
+    colorIntensityMax = 255
+  } = options;
   const normalized = (value - min) / (max - min);
   const clamped = Math.max(0, Math.min(1, normalized));
   
@@ -32,9 +36,16 @@ const getColorForValue = (value, min, max) => {
   const range = c2.pos - c1.pos;
   const rangePct = range === 0 ? 0 : (clamped - c1.pos) / range;
   
-  const r = Math.round(c1.r + (c2.r - c1.r) * rangePct);
-  const g = Math.round(c1.g + (c2.g - c1.g) * rangePct);
-  const b = Math.round(c1.b + (c2.b - c1.b) * rangePct);
+  const rRaw = Math.round(c1.r + (c2.r - c1.r) * rangePct);
+  const gRaw = Math.round(c1.g + (c2.g - c1.g) * rangePct);
+  const bRaw = Math.round(c1.b + (c2.b - c1.b) * rangePct);
+
+  // Optional color softening: compress 0..255 to a narrower band (e.g. 50..200)
+  const span = Math.max(0, colorIntensityMax - colorIntensityMin);
+  const scaleChannel = (v) => Math.round(colorIntensityMin + (v / 255) * span);
+  const r = scaleChannel(rRaw);
+  const g = scaleChannel(gRaw);
+  const b = scaleChannel(bRaw);
   
   return { r, g, b };
 };
@@ -83,7 +94,15 @@ const bilinearInterpolate = (x, y, gridData) => {
   return weightSum > 0 ? sum / weightSum : null;
 };
 
-const SimpleHeatmap = ({ data, valueExtractor, opacity = 0.75 }) => {
+const SimpleHeatmap = ({
+  data,
+  valueExtractor,
+  opacity = 0.75,
+  minValueOverride = null,
+  maxValueOverride = null,
+  colorIntensityMin = 0,
+  colorIntensityMax = 255
+}) => {
   const map = useMap();
   const overlayRef = useRef(null);
   
@@ -109,8 +128,10 @@ const SimpleHeatmap = ({ data, valueExtractor, opacity = 0.75 }) => {
     const maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs);
     const maxLng = Math.max(...lngs);
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
+    const computedMinValue = Math.min(...values);
+    const computedMaxValue = Math.max(...values);
+    const minValue = Number.isFinite(minValueOverride) ? minValueOverride : computedMinValue;
+    const maxValue = Number.isFinite(maxValueOverride) ? maxValueOverride : computedMaxValue;
     
     console.log('[SimpleHeatmap] Bounds:', { 
       lat: [minLat, maxLat], 
@@ -160,7 +181,10 @@ const SimpleHeatmap = ({ data, valueExtractor, opacity = 0.75 }) => {
         const value = bilinearInterpolate(gridX, gridY, gridData);
         
         if (value !== null && !isNaN(value)) {
-          const color = getColorForValue(value, minValue, maxValue);
+          const color = getColorForValue(value, minValue, maxValue, {
+            colorIntensityMin,
+            colorIntensityMax
+          });
           const idx = (py * canvasSize + px) * 4;
           pixelData[idx] = color.r;
           pixelData[idx + 1] = color.g;
@@ -200,7 +224,7 @@ const SimpleHeatmap = ({ data, valueExtractor, opacity = 0.75 }) => {
         console.log('[SimpleHeatmap] Overlay removed');
       }
     };
-  }, [map, data, valueExtractor, opacity]);
+  }, [map, data, valueExtractor, opacity, minValueOverride, maxValueOverride, colorIntensityMin, colorIntensityMax]);
   
   return null;
 };
