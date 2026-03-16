@@ -3,8 +3,8 @@
 
 DWAPlannerROS:
   # Robot velocity limits (conservative for uneven terrain)
-  max_vel_x: 0.45
-  min_vel_x: -0.10
+  max_vel_x: 0.25
+  min_vel_x: 0.05
   max_vel_y: 0.0
   min_vel_y: 0.0
   max_vel_theta: 1.2
@@ -16,7 +16,7 @@ DWAPlannerROS:
 
   # Goal tolerances (relaxed for outdoor GPS/odom drift)
   yaw_goal_tolerance: 0.4
-  xy_goal_tolerance: 0.40
+  xy_goal_tolerance: 0.20
   latch_xy_goal_tolerance: true
 
   # Forward simulation (longer horizon for outdoor planning)
@@ -29,7 +29,7 @@ DWAPlannerROS:
   # Trajectory scoring -- balance reaching goals vs avoiding walls
   path_distance_bias: 20.0
   goal_distance_bias: 28.0
-  occdist_scale: 0.3
+  occdist_scale: 0.8
 
   # Oscillation prevention
   oscillation_reset_dist: 0.10
