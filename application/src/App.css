@@ -297,6 +297,26 @@
   color: #f8fafc;
 }
 
+.fuel-task-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  color: #f8fafc;
+}
+
+.fuel-task-table th,
+.fuel-task-table td {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  padding: 4px 6px;
+  text-align: right;
+}
+
+.fuel-task-table th:first-child,
+.fuel-task-table td:first-child {
+  text-align: center;
+}
+
 .fuel-task-error {
   margin: 6px 0 0;
   color: #f87171;

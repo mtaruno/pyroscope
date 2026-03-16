@@ -174,16 +174,28 @@ class ImageService:
             return {"success": False, "error": "No visible images found for scan"}
 
         successful: List[Dict[str, Any]] = []
-        errors: List[str] = []
+        errors: List[Dict[str, Any]] = []
         for image in images:
             result = self.estimate_fuel_for_image_path(image.file_path)
             if result.get("success"):
-                successful.append(result)
+                successful.append({
+                    "image_id": image.id,
+                    "file_path": image.file_path,
+                    "total_fuel_load": result.get("total_fuel_load"),
+                    "one_hour_fuel": result.get("one_hour_fuel"),
+                    "ten_hour_fuel": result.get("ten_hour_fuel"),
+                    "hundred_hour_fuel": result.get("hundred_hour_fuel"),
+                    "pine_cone_count": result.get("pine_cone_count"),
+                })
             else:
-                errors.append(result.get("error", "Unknown fuel API error"))
+                errors.append({
+                    "image_id": image.id,
+                    "file_path": image.file_path,
+                    "error": result.get("error", "Unknown fuel API error"),
+                })
 
         if not successful:
-            return {"success": False, "error": "; ".join(errors)}
+            return {"success": False, "error": "; ".join(item["error"] for item in errors)}
 
         def _avg(key: str) -> Optional[float]:
             values = [item.get(key) for item in successful if item.get(key) is not None]
@@ -217,4 +229,5 @@ class ImageService:
             "processed_images": len(successful),
             "total_images": len(images),
             "errors": errors,
+            "per_image_results": successful,
         }

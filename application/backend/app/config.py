@@ -30,6 +30,13 @@ class Settings(BaseSettings):
     FUEL_ESTIMATION_TIMEOUT: int = 60
     FUEL_ESTIMATION_API_KEY: Optional[str] = ""
     FUEL_ESTIMATION_HEADLESS: bool = True
+
+    # Thermal image rendering (for /api/sensors/live/thermal)
+    THERMAL_COLORMAP: str = "inferno"
+    THERMAL_INVERT: bool = True
+    THERMAL_NORM_LOW_PCT: float = 2.0
+    THERMAL_NORM_HIGH_PCT: float = 98.0
+    THERMAL_GAMMA: float = 1.8
     
     @property
     def cors_origins_list(self) -> List[str]:

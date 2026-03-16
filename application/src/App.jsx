@@ -57,7 +57,7 @@ function App() {
   const [showFuelPromptModal, setShowFuelPromptModal] = useState(false)
   const [fuelPromptScanId, setFuelPromptScanId] = useState(null)
   const [fuelPromptReason, setFuelPromptReason] = useState('')
-  const [fuelUseLocalPhoto, setFuelUseLocalPhoto] = useState(true)
+  const [fuelUseLocalPhoto, setFuelUseLocalPhoto] = useState(false)
   const [fuelLocalFile, setFuelLocalFile] = useState(null)
   const [fuelPromptError, setFuelPromptError] = useState('')
   const [fuelTask, setFuelTask] = useState({
@@ -303,7 +303,7 @@ function App() {
     if (!scanId) return
     setFuelPromptScanId(scanId)
     setFuelPromptReason(reason)
-    setFuelUseLocalPhoto(true)
+    setFuelUseLocalPhoto(false)
     setFuelLocalFile(null)
     setFuelPromptError('')
     setShowFuelPromptModal(true)
@@ -316,7 +316,14 @@ function App() {
     if (scanId) loadAndShowScanResult(scanId)
   }
 
-  const getFuelStage = (progress) => {
+  const getFuelStage = (progress, mode = 'single', imageCount = 1) => {
+    if (mode === 'batch') {
+      if (progress < 10) return `Preparing ${imageCount} backend image(s)...`
+      if (progress < 35) return `Uploading ${imageCount} image(s) to Fuel API...`
+      if (progress < 75) return `Running inference for ${imageCount} image(s)...`
+      if (progress < 92) return 'Aggregating per-image results...'
+      return 'Finalizing batch response...'
+    }
     if (progress < 12) return 'Uploading image to backend...'
     if (progress < 35) return 'Validating payload and preparing model...'
     if (progress < 62) return 'Running fuel inference...'
@@ -331,17 +338,17 @@ function App() {
     }
   }
 
-  const startFuelProgressTicker = () => {
+  const startFuelProgressTicker = (expectedMs = FUEL_TIMEOUT_MS, mode = 'single', imageCount = 1) => {
     clearFuelProgressTicker()
     fuelProgressStartRef.current = Date.now()
     fuelProgressRef.current = setInterval(() => {
       const elapsed = Date.now() - fuelProgressStartRef.current
-      const progress = Math.min(FUEL_PROGRESS_CAP, (elapsed / FUEL_TIMEOUT_MS) * FUEL_PROGRESS_CAP)
+      const progress = Math.min(FUEL_PROGRESS_CAP, (elapsed / Math.max(1000, expectedMs)) * FUEL_PROGRESS_CAP)
       setFuelTask(prev => ({
         ...prev,
         progress,
         elapsedMs: elapsed,
-        stage: getFuelStage(progress)
+        stage: getFuelStage(progress, mode, imageCount)
       }))
     }, 250)
   }
@@ -397,6 +404,17 @@ function App() {
     setFuelPromptError('')
     loadAndShowScanResult(scanId)
 
+    const taskMode = fuelUseLocalPhoto ? 'single' : 'batch'
+    let scanImageCount = 1
+    if (!fuelUseLocalPhoto) {
+      try {
+        const detail = await apiClient.getScanDetail(scanId)
+        scanImageCount = Math.max(1, (detail?.images || []).filter((img) => img.image_type === 'visible').length)
+      } catch {
+        scanImageCount = 1
+      }
+    }
+
     setFuelTask({
       visible: true,
       collapsed: false,
@@ -405,30 +423,33 @@ function App() {
       stage: 'Starting task...',
       elapsedMs: 0,
       scanId: fuelPromptScanId,
-      fileName: fuelUseLocalPhoto ? (fuelLocalFile?.name || '') : 'latest_capture_from_scan',
+      fileName: fuelUseLocalPhoto ? (fuelLocalFile?.name || '') : `${scanImageCount} image(s) from backend scan folder`,
       imageUrl: fuelUseLocalPhoto && fuelLocalFile ? URL.createObjectURL(fuelLocalFile) : '',
       result: null,
       error: '',
       noFuelDetected: false
     })
 
-    startFuelProgressTicker()
+    const expectedMs = fuelUseLocalPhoto ? FUEL_TIMEOUT_MS : Math.max(60000, scanImageCount * 60000)
+    startFuelProgressTicker(expectedMs, taskMode, scanImageCount)
     const timeoutController = new AbortController()
     const timeoutHandle = setTimeout(() => {
       timeoutController.abort()
-    }, FUEL_TIMEOUT_MS)
+    }, expectedMs)
     try {
-      const uploadFile = fuelUseLocalPhoto ? fuelLocalFile : await fetchLatestCaptureFile(fuelPromptScanId)
-      if (!fuelUseLocalPhoto && uploadFile) {
-        setFuelTask(prev => ({ ...prev, fileName: uploadFile.name, imageUrl: URL.createObjectURL(uploadFile) }))
+      let response = null
+      if (fuelUseLocalPhoto) {
+        const uploadFile = fuelLocalFile
+        response = await apiClient.uploadImage(fuelPromptScanId, uploadFile, {
+          image_type: 'visible',
+          estimate_fuel: true
+        }, {
+          signal: timeoutController.signal
+        })
+      } else {
+        response = await apiClient.estimateFuelForScan(fuelPromptScanId)
       }
-      const response = await apiClient.uploadImage(fuelPromptScanId, uploadFile, {
-        image_type: 'visible',
-        estimate_fuel: true
-      }, {
-        signal: timeoutController.signal
-      })
-      const estimation = response?.fuel_estimation
+      const estimation = response?.fuel_estimation || response
       if (!estimation || estimation.total_fuel_load == null) {
         throw new Error('Fuel API returned no estimation result.')
       }
@@ -443,7 +464,7 @@ function App() {
         progress: 100,
         stage: 'Fuel estimation completed.',
         elapsedMs: Date.now() - fuelProgressStartRef.current,
-        result: response,
+        result: estimation,
         noFuelDetected: false
       }))
       loadAndShowScanResult(scanId)
@@ -663,7 +684,7 @@ function App() {
                 </div>
               ) : (
                 <p className="fuel-prompt-hint">
-                  The app will upload latest capture image from this scan.
+                  Default mode: estimate fuel from all visible images already saved in backend for this scan.
                 </p>
               )}
 
@@ -740,11 +761,35 @@ function App() {
 
                 {fuelTask.status === 'success' && !fuelTask.noFuelDetected && (
                   <div className="fuel-task-results">
-                    <p>Total: <strong>{fuelTask.result?.fuel_estimation?.total_fuel_load ?? 'N/A'}</strong> tons/acre</p>
-                    <p>1-Hour: <strong>{fuelTask.result?.fuel_estimation?.one_hour_fuel ?? 'N/A'}</strong></p>
-                    <p>10-Hour: <strong>{fuelTask.result?.fuel_estimation?.ten_hour_fuel ?? 'N/A'}</strong></p>
-                    <p>100-Hour: <strong>{fuelTask.result?.fuel_estimation?.hundred_hour_fuel ?? 'N/A'}</strong></p>
-                    <p>Pine Cones: <strong>{fuelTask.result?.fuel_estimation?.pine_cone_count ?? 'N/A'}</strong></p>
+                    <p>Total: <strong>{fuelTask.result?.total_fuel_load ?? 'N/A'}</strong> tons/acre</p>
+                    <p>1-Hour: <strong>{fuelTask.result?.one_hour_fuel ?? 'N/A'}</strong></p>
+                    <p>10-Hour: <strong>{fuelTask.result?.ten_hour_fuel ?? 'N/A'}</strong></p>
+                    <p>100-Hour: <strong>{fuelTask.result?.hundred_hour_fuel ?? 'N/A'}</strong></p>
+                    <p>Pine Cones: <strong>{fuelTask.result?.pine_cone_count ?? 'N/A'}</strong></p>
+                    {(fuelTask.result?.per_image_results?.length || 0) > 0 && (
+                      <table className="fuel-task-table">
+                        <thead>
+                          <tr>
+                            <th>#</th>
+                            <th>Total</th>
+                            <th>1h</th>
+                            <th>10h</th>
+                            <th>100h</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {fuelTask.result.per_image_results.map((item, idx) => (
+                            <tr key={item.image_id || idx}>
+                              <td>{idx + 1}</td>
+                              <td>{item.total_fuel_load ?? '-'}</td>
+                              <td>{item.one_hour_fuel ?? '-'}</td>
+                              <td>{item.ten_hour_fuel ?? '-'}</td>
+                              <td>{item.hundred_hour_fuel ?? '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                   </div>
                 )}
               </div>
@@ -871,7 +916,7 @@ function App() {
               </div>
             ) : (
               <p className="fuel-prompt-hint">
-                The app will upload latest capture image from this scan.
+                Default mode: estimate fuel from all visible images already saved in backend for this scan.
               </p>
             )}
 
@@ -947,11 +992,35 @@ function App() {
                   </div>
                 ) : (
                 <div className="fuel-task-results">
-                  <p>Total: <strong>{fuelTask.result?.fuel_estimation?.total_fuel_load ?? 'N/A'}</strong> tons/acre</p>
-                  <p>1-Hour: <strong>{fuelTask.result?.fuel_estimation?.one_hour_fuel ?? 'N/A'}</strong></p>
-                  <p>10-Hour: <strong>{fuelTask.result?.fuel_estimation?.ten_hour_fuel ?? 'N/A'}</strong></p>
-                  <p>100-Hour: <strong>{fuelTask.result?.fuel_estimation?.hundred_hour_fuel ?? 'N/A'}</strong></p>
-                  <p>Pine Cones: <strong>{fuelTask.result?.fuel_estimation?.pine_cone_count ?? 'N/A'}</strong></p>
+                  <p>Total: <strong>{fuelTask.result?.total_fuel_load ?? 'N/A'}</strong> tons/acre</p>
+                  <p>1-Hour: <strong>{fuelTask.result?.one_hour_fuel ?? 'N/A'}</strong></p>
+                  <p>10-Hour: <strong>{fuelTask.result?.ten_hour_fuel ?? 'N/A'}</strong></p>
+                  <p>100-Hour: <strong>{fuelTask.result?.hundred_hour_fuel ?? 'N/A'}</strong></p>
+                  <p>Pine Cones: <strong>{fuelTask.result?.pine_cone_count ?? 'N/A'}</strong></p>
+                  {(fuelTask.result?.per_image_results?.length || 0) > 0 && (
+                    <table className="fuel-task-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Total</th>
+                          <th>1h</th>
+                          <th>10h</th>
+                          <th>100h</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fuelTask.result.per_image_results.map((item, idx) => (
+                          <tr key={item.image_id || idx}>
+                            <td>{idx + 1}</td>
+                            <td>{item.total_fuel_load ?? '-'}</td>
+                            <td>{item.one_hour_fuel ?? '-'}</td>
+                            <td>{item.ten_hour_fuel ?? '-'}</td>
+                            <td>{item.hundred_hour_fuel ?? '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
                 )
               )}

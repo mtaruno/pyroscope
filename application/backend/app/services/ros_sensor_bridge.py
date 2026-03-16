@@ -195,8 +195,31 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         except (ImportError, KeyError):
             # Fallback: manual inferno-like gradient (cold=blue, hot=yellow/white)
             return pil_gray.convert("RGB")
-        gray_arr = np.array(pil_gray, dtype=np.float32) / 255.0
-        colored = (cmap(gray_arr)[:, :, :3] * 255).astype(np.uint8)
+        gray_raw = np.array(pil_gray, dtype=np.float32)
+
+        # Robust normalization reduces sudden color flips when scene content changes.
+        low_pct = float(getattr(settings, "THERMAL_NORM_LOW_PCT", 2.0))
+        high_pct = float(getattr(settings, "THERMAL_NORM_HIGH_PCT", 98.0))
+        low_val = np.percentile(gray_raw, low_pct)
+        high_val = np.percentile(gray_raw, high_pct)
+        if high_val <= low_val:
+            low_val = float(np.min(gray_raw))
+            high_val = float(np.max(gray_raw))
+        if high_val <= low_val:
+            normalized = np.zeros_like(gray_raw, dtype=np.float32)
+        else:
+            normalized = np.clip((gray_raw - low_val) / (high_val - low_val), 0.0, 1.0)
+
+        # Sensor polarity: many thermal streams are inverted (hotter -> lower raw value).
+        if bool(getattr(settings, "THERMAL_INVERT", True)):
+            normalized = 1.0 - normalized
+
+        # Gamma > 1 suppresses background noise while keeping hot targets prominent.
+        gamma = float(getattr(settings, "THERMAL_GAMMA", 1.8))
+        if gamma > 0:
+            normalized = np.power(normalized, gamma)
+
+        colored = (cmap(normalized)[:, :, :3] * 255).astype(np.uint8)
         return PILImage.fromarray(colored)
 
     _rgb_logged = [False]
@@ -205,7 +228,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
     def cb_thermal_image(msg):
         # Keep publisher-provided pseudo-color when stream is already RGB/BGR.
         mono_encodings = {"mono8", "mono16", "8UC1", "16UC1"}
-        thermal_colormap = "inferno" if msg.encoding in mono_encodings else None
+        thermal_colormap = settings.THERMAL_COLORMAP if msg.encoding in mono_encodings else None
         jpeg_bytes = _ros_image_to_jpeg(msg, encoding="bgr8", colormap=thermal_colormap)
         if jpeg_bytes:
             with _ros_cache["lock"]:
