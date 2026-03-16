@@ -27,6 +27,33 @@ try:
 except ImportError:
     HAS_SENXOR = False
 
+# Thermal display tuning:
+# Smaller value means hotter for this sensor stream.
+# We enforce a fixed visual window to increase contrast in UI:
+#   <= 80  -> hot (red)
+#   >= 180 -> cold (deep blue)
+THERMAL_HOT_VALUE = 80
+THERMAL_COLD_VALUE = 180
+
+
+def colorize_thermal_uint8(gray_uint8):
+    """Map thermal grayscale to pseudo-color with inverse temperature logic.
+
+    gray_uint8: uint8 image where smaller value means hotter.
+    Returns BGR color image:
+      <= THERMAL_HOT_VALUE  -> red
+      >= THERMAL_COLD_VALUE -> deep blue
+    """
+    if cv is None or np is None:
+        return gray_uint8
+
+    clipped = np.clip(gray_uint8, THERMAL_HOT_VALUE, THERMAL_COLD_VALUE).astype(np.float32)
+    # Fixed mapping: 80 -> 0, 180 -> 255.
+    normalized = ((clipped - THERMAL_HOT_VALUE) * 255.0 / (THERMAL_COLD_VALUE - THERMAL_HOT_VALUE)).astype(np.uint8)
+    # Invert so lower value becomes hotter (red).
+    inverted = 255 - normalized
+    return cv.applyColorMap(inverted, cv.COLORMAP_JET)
+
 
 def capture_once(save_image_path=None, simulate=False):
     """
@@ -65,8 +92,8 @@ def capture_once(save_image_path=None, simulate=False):
             min_t, max_t = float(np.min(frame)), float(np.max(frame))
             frame_clip = np.clip(frame, min_t, max_t)
             filt_uint8 = cv_filter(remap(frame_clip), par, use_median=True, use_bilat=True, use_nlm=False)
-            # Publish/store thermal image in a common pseudo-color style for UI display.
-            thermal_color = cv.applyColorMap(filt_uint8, cv.COLORMAP_INFERNO)
+            # Apply fixed thermal palette window for stronger contrast in field operation.
+            thermal_color = colorize_thermal_uint8(filt_uint8)
             cv.imwrite(save_image_path, thermal_color)
             image_path = save_image_path
     finally:
