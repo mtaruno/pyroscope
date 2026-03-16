@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import './ScanConfigModal.css'
 
 const AREA_OPTIONS = [1, 2, 3]
-const PRECISION_OPTIONS = [0.25, 0.5, 1]
+const PRECISION_OPTIONS = [0.25, 0.5, 0.8, 1]
 const SCAN_SECONDS_PER_SQUARE_METER = 5
 const SCAN_SECONDS_PER_POINT = 8
 const FUEL_ESTIMATE_SECONDS_PER_POINT = 60

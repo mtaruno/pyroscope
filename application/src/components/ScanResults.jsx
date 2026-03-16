@@ -11,7 +11,7 @@ function ScanResults({ scanData, onBack }) {
   const [showPointData, setShowPointData] = useState(false)
   const [loadingPoints, setLoadingPoints] = useState(false)
   const [samplesData, setSamplesData] = useState(null)
-  const [showSamples, setShowSamples] = useState(false)
+  const [showSamples, setShowSamples] = useState(true)
   const [loadingSamples, setLoadingSamples] = useState(false)
 
   // Load point-level data when toggled

@@ -166,14 +166,17 @@ class CoveragePlanner:
         self.cmd_vel_pub.publish(Twist())
 
     def get_robot_pose(self):
-        try:
-            common_time = self.tf_listener.getLatestCommonTime('odom', 'base_link')
-            trans, rot = self.tf_listener.lookupTransform('odom', 'base_link', rospy.Time(0))
-            yaw = tf.transformations.euler_from_quaternion(rot)[2]
-            pose_age = abs((rospy.Time.now() - common_time).to_sec())
-            return (trans[0], trans[1], yaw, pose_age)
-        except (tf.Exception, tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            return None
+        # Prefer map frame (SLAM-corrected); fall back to odom if map not yet available
+        for frame in ('map', 'odom'):
+            try:
+                common_time = self.tf_listener.getLatestCommonTime(frame, 'base_link')
+                trans, rot = self.tf_listener.lookupTransform(frame, 'base_link', rospy.Time(0))
+                yaw = tf.transformations.euler_from_quaternion(rot)[2]
+                pose_age = abs((rospy.Time.now() - common_time).to_sec())
+                return (trans[0], trans[1], yaw, pose_age)
+            except (tf.Exception, tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                continue
+        return None
 
     def wait_for_fresh_pose(self, timeout):
         deadline = rospy.Time.now() + rospy.Duration(timeout)
@@ -403,7 +406,7 @@ class CoveragePlanner:
             return False
 
         goal = MoveBaseGoal()
-        goal.target_pose.header.frame_id = "odom"
+        goal.target_pose.header.frame_id = "map"
         goal.target_pose.header.stamp = rospy.Time.now()
         goal.target_pose.pose.position.x = x
         goal.target_pose.pose.position.y = y
@@ -446,9 +449,9 @@ class CoveragePlanner:
         self.progress_pub.publish(String(data=msg))
 
     def run(self):
-        # Wait for subscribers to connect and costmap to populate
-        rospy.loginfo("Waiting 5s for costmap to populate from lidar...")
-        rospy.sleep(5.0)
+        # Wait for gmapping to publish first /map and for costmap to populate
+        rospy.loginfo("Waiting 8s for SLAM map and costmap to initialize...")
+        rospy.sleep(8.0)
 
         rospy.loginfo("Starting coverage mission!")
 

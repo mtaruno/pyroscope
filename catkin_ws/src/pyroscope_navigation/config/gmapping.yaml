@@ -1,0 +1,51 @@
+# GMapping SLAM parameters — tuned for small indoor/arena environments
+slam_gmapping:
+  base_frame: base_link
+  odom_frame: odom
+  map_frame: map
+
+  # How often to update the map (seconds)
+  map_update_interval: 1.0
+
+  # Laser range limits (keep slightly inside actual sensor max)
+  maxUrange: 4.5
+  maxRange: 5.0
+
+  # Motion model noise (conservative for wheel odom)
+  srr: 0.1     # rotation noise from rotation
+  srt: 0.2     # translation noise from rotation
+  str: 0.1     # rotation noise from translation
+  stt: 0.2     # translation noise from translation
+
+  # Update triggers — update after this much motion
+  linearUpdate: 0.05
+  angularUpdate: 0.05
+  temporalUpdate: 3.0
+
+  # Particle filter
+  particles: 30
+  resampleThreshold: 0.5
+
+  # Map bounds — large enough for any likely arena size
+  xmin: -8.0
+  ymin: -8.0
+  xmax: 8.0
+  ymax: 8.0
+  delta: 0.05  # map resolution — matches costmap resolution
+
+  # Scan matching
+  sigma: 0.05
+  kernelSize: 1
+  lstep: 0.05
+  astep: 0.05
+  iterations: 5
+  lsigma: 0.075
+  ogain: 3.0
+  lskip: 0
+  minimumScore: 50
+
+  # Fine-grained sampling
+  llsamplerange: 0.01
+  llsamplestep: 0.01
+  lasamplerange: 0.005
+  lasamplestep: 0.005
