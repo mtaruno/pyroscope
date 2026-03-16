@@ -79,15 +79,35 @@ class MissionConfig(BaseModel):
 def _calc_total_waypoints(area_width: float, area_height: float,
                           row_spacing: float, waypoint_spacing: float,
                           wall_margin: float = 0.30) -> int:
-    """Match the coverage_planner.py waypoint generation logic (centered grid)."""
-    import math
-    ew = area_width - 2 * wall_margin  # centered: same effective width
-    eh = area_height - 2 * wall_margin
-    if ew <= 0 or eh <= 0:
-        return 1  # center-point-only fallback
-    num_rows = max(1, int(math.ceil(eh / row_spacing)) + 1)
-    num_cols = max(1, int(math.ceil(ew / waypoint_spacing)) + 1)
-    return num_rows * num_cols
+    """Match coverage_planner.generate_lawnmower_waypoints() exactly."""
+    half_w = area_width / 2.0
+    half_h = area_height / 2.0
+    x_min = -half_w + wall_margin
+    x_max = half_w - wall_margin
+    y_min = -half_h + wall_margin
+    y_max = half_h - wall_margin
+
+    if x_min > x_max or y_min > y_max:
+        return 0
+
+    total = 0
+    row_index = 0
+    y = y_min
+    while y <= y_max + 1e-9:
+        if row_index % 2 == 0:
+            x = x_min
+            while x <= x_max + 1e-9:
+                total += 1
+                x += waypoint_spacing
+        else:
+            x = x_max
+            while x >= x_min - 1e-9:
+                total += 1
+                x -= waypoint_spacing
+        y += row_spacing
+        row_index += 1
+
+    return total
 
 
 @router.post("/mission/start")

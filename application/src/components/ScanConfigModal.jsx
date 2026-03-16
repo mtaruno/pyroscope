@@ -10,12 +10,36 @@ const FUEL_ESTIMATE_SECONDS_PER_POINT = 60
 const WALL_MARGIN = 0.30
 
 function calcTotalPoints(areaSize, precision, rowSpacing) {
-  const ew = areaSize - 2 * WALL_MARGIN
-  const eh = areaSize - 2 * WALL_MARGIN
-  if (ew <= 0 || eh <= 0) return 1
-  const numRows = Math.max(1, Math.ceil(eh / rowSpacing) + 1)
-  const numCols = Math.max(1, Math.ceil(ew / precision) + 1)
-  return numRows * numCols
+  const half = areaSize / 2
+  const xMin = -half + WALL_MARGIN
+  const xMax = half - WALL_MARGIN
+  const yMin = -half + WALL_MARGIN
+  const yMax = half - WALL_MARGIN
+
+  if (xMin > xMax || yMin > yMax) return 0
+
+  let total = 0
+  let rowIndex = 0
+  let y = yMin
+  while (y <= yMax + 1e-9) {
+    if (rowIndex % 2 === 0) {
+      let x = xMin
+      while (x <= xMax + 1e-9) {
+        total += 1
+        x += precision
+      }
+    } else {
+      let x = xMax
+      while (x >= xMin - 1e-9) {
+        total += 1
+        x -= precision
+      }
+    }
+    y += rowSpacing
+    rowIndex += 1
+  }
+
+  return total
 }
 
 function formatDuration(totalSeconds) {
