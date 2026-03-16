@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fuel Estimation Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --accent: #22c55e;
+      --accent-2: #3b82f6;
+      --warn: #f59e0b;
+      --error: #ef4444;
+      --border: rgba(148, 163, 184, 0.25);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Arial, sans-serif;
+      color: var(--text);
+      background: linear-gradient(180deg, #0b1020 0%, #111827 100%);
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .wrap {
+      max-width: 980px;
+      margin: 0 auto;
+      display: grid;
+      gap: 16px;
+    }
+
+    .card {
+      background: rgba(17, 24, 39, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+    }
+
+    h1 {
+      margin: 0 0 6px;
+      font-size: 24px;
+    }
+
+    .sub {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input, select, button {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #0b1220;
+      color: var(--text);
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+
+    input[type="checkbox"] {
+      width: auto;
+      transform: scale(1.15);
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    button {
+      background: linear-gradient(90deg, #2563eb, #3b82f6);
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      margin-top: 8px;
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .inline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      margin-top: 30px;
+      font-size: 14px;
+    }
+
+    .preview {
+      margin-top: 12px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      min-height: 150px;
+      display: grid;
+      place-items: center;
+      background: rgba(15, 23, 42, 0.6);
+      overflow: hidden;
+    }
+
+    .preview img {
+      max-width: 100%;
+      max-height: 300px;
+      display: block;
+    }
+
+    .progress-wrap {
+      margin-top: 8px;
+      background: #0b1220;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      height: 14px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #22c55e, #10b981, #14b8a6);
+      transition: width 220ms linear;
+    }
+
+    .progress-meta {
+      margin-top: 8px;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .status {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #cbd5e1;
+    }
+
+    .status.ok { color: var(--accent); }
+    .status.warn { color: var(--warn); }
+    .status.err { color: var(--error); }
+
+    .result-grid {
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+
+    .metric .k {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+
+    .metric .v {
+      font-size: 18px;
+      font-weight: 700;
+      color: #f8fafc;
+      word-break: break-word;
+    }
+
+    pre {
+      margin: 12px 0 0;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #020617;
+      color: #e2e8f0;
+      padding: 12px;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 300px;
+      overflow: auto;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>Fuel Load Estimation Demo (Offline)</h1>
+      <p class="sub">
+        Select a local image folder for demo, choose one prepared top-down photo, then run a paced 2-minute-style processing animation with simulated fuel output.
+      </p>
+
+      <div class="grid">
+        <div>
+          <label for="folderInput">Image Folder (local)</label>
+          <input id="folderInput" type="file" webkitdirectory directory multiple />
+        </div>
+        <div>
+          <label for="selectedImage">Prepared Demo Image</label>
+          <select id="selectedImage">
+            <option value="">Select folder first...</option>
+          </select>
+        </div>
+        <div>
+          <label for="imageType">Image Type (display only)</label>
+          <select id="imageType">
+            <option value="visible" selected>visible</option>
+            <option value="thermal">thermal</option>
+            <option value="panorama">panorama</option>
+            <option value="detail">detail</option>
+          </select>
+        </div>
+        <div>
+          <label for="runtimeSelect">Demo Runtime</label>
+          <select id="runtimeSelect">
+            <option value="auto" selected>Auto (40s - 110s)</option>
+            <option value="45">Short (~45s)</option>
+            <option value="75">Medium (~75s)</option>
+            <option value="110">Long (~110s)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="inline">
+        <label><input id="estimateFuel" type="checkbox" checked />Show fuel estimation output</label>
+      </div>
+
+      <button id="startBtn">Start Demo</button>
+      <div class="preview" id="previewBox">No image selected</div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 8px;font-size:18px;">Processing Progress</h2>
+      <div class="progress-wrap">
+        <div id="progressBar" class="progress-bar"></div>
+      </div>
+      <div class="progress-meta">
+        <span id="progressLabel">0%</span>
+        <span id="elapsedLabel">Elapsed: 00:00</span>
+        <span>Visual pacing target: 02:00</span>
+      </div>
+      <div id="statusText" class="status">Waiting to start.</div>
+    </section>
+
+    <section class="card">
+      <h2 style="margin:0 0 6px;font-size:18px;">Result</h2>
+      <div id="resultState" class="sub">No result yet.</div>
+      <div id="resultGrid" class="result-grid"></div>
+      <pre id="rawJson">{"message":"Simulated response will appear here"}</pre>
+    </section>
+  </div>
+
+  <script>
+    const MAX_VISUAL_MS = 120000; // 2 minutes visual pacing ceiling
+    const MAX_BEFORE_DONE = 94;   // Keep room for quick finish animation
+
+    const el = {
+      folderInput: document.getElementById('folderInput'),
+      selectedImage: document.getElementById('selectedImage'),
+      imageType: document.getElementById('imageType'),
+      runtimeSelect: document.getElementById('runtimeSelect'),
+      estimateFuel: document.getElementById('estimateFuel'),
+      startBtn: document.getElementById('startBtn'),
+      previewBox: document.getElementById('previewBox'),
+      progressBar: document.getElementById('progressBar'),
+      progressLabel: document.getElementById('progressLabel'),
+      elapsedLabel: document.getElementById('elapsedLabel'),
+      statusText: document.getElementById('statusText'),
+      resultState: document.getElementById('resultState'),
+      resultGrid: document.getElementById('resultGrid'),
+      rawJson: document.getElementById('rawJson')
+    };
+
+    let timerId = null;
+    let startMs = 0;
+    let visualProgress = 0;
+    let localImages = [];
+
+    function setStatus(text, cls = '') {
+      el.statusText.className = `status ${cls}`.trim();
+      el.statusText.textContent = text;
+    }
+
+    function setProgress(pct) {
+      visualProgress = Math.max(0, Math.min(100, pct));
+      el.progressBar.style.width = `${visualProgress.toFixed(1)}%`;
+      el.progressLabel.textContent = `${Math.round(visualProgress)}%`;
+    }
+
+    function fmtMs(ms) {
+      const s = Math.floor(ms / 1000);
+      const m = Math.floor(s / 60);
+      const ss = String(s % 60).padStart(2, '0');
+      return `${String(m).padStart(2, '0')}:${ss}`;
+    }
+
+    function statusForProgress(p) {
+      if (p < 12) return 'Loading selected local image...';
+      if (p < 32) return 'Preparing canopy segmentation...';
+      if (p < 60) return 'Running fuel inference model...';
+      if (p < 84) return 'Computing 1h / 10h / 100h fuels...';
+      return 'Finalizing output...';
+    }
+
+    function startVisualTicker(targetMs = MAX_VISUAL_MS) {
+      stopVisualTicker();
+      startMs = Date.now();
+      timerId = setInterval(() => {
+        const elapsed = Date.now() - startMs;
+        const paced = Math.min(MAX_BEFORE_DONE, (elapsed / targetMs) * MAX_BEFORE_DONE);
+        setProgress(paced);
+        el.elapsedLabel.textContent = `Elapsed: ${fmtMs(elapsed)}`;
+        setStatus(statusForProgress(paced));
+      }, 250);
+    }
+
+    function stopVisualTicker() {
+      if (timerId) {
+        clearInterval(timerId);
+        timerId = null;
+      }
+    }
+
+    function renderResultCards(fuel) {
+      const rows = [
+        ['Total Fuel Load (tons/acre)', fuel?.total_fuel_load],
+        ['1-Hour Fuel (tons/acre)', fuel?.one_hour_fuel],
+        ['10-Hour Fuel (tons/acre)', fuel?.ten_hour_fuel],
+        ['100-Hour Fuel (tons/acre)', fuel?.hundred_hour_fuel],
+        ['Pine Cone Count', fuel?.pine_cone_count]
+      ];
+      el.resultGrid.innerHTML = rows.map(([k, v]) => (
+        `<div class="metric"><div class="k">${k}</div><div class="v">${v ?? 'N/A'}</div></div>`
+      )).join('');
+    }
+
+    async function fastCompleteTo100() {
+      const start = visualProgress;
+      const end = 100;
+      const duration = 700;
+      const t0 = performance.now();
+      return new Promise((resolve) => {
+        function tick(t) {
+          const ratio = Math.min(1, (t - t0) / duration);
+          setProgress(start + (end - start) * ratio);
+          if (ratio < 1) {
+            requestAnimationFrame(tick);
+          } else {
+            resolve();
+          }
+        }
+        requestAnimationFrame(tick);
+      });
+    }
+
+    function showPreview(file) {
+      if (!file) {
+        el.previewBox.textContent = 'No image selected';
+        return;
+      }
+      const url = URL.createObjectURL(file);
+      el.previewBox.innerHTML = `<img src="${url}" alt="preview" />`;
+    }
+
+    function isImageName(name = '') {
+      return /\.(jpg|jpeg|png|webp)$/i.test(name);
+    }
+
+    function hashString(input = '') {
+      let h = 2166136261;
+      for (let i = 0; i < input.length; i++) {
+        h ^= input.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return Math.abs(h >>> 0);
+    }
+
+    function generateMockFuelFromName(name) {
+      const seed = hashString(name);
+      const one = (0.01 + (seed % 90) / 10000).toFixed(4);
+      const ten = (0.03 + ((seed >> 3) % 180) / 10000).toFixed(4);
+      const hundred = (0.06 + ((seed >> 7) % 360) / 10000).toFixed(4);
+      const total = (Number(one) + Number(ten) + Number(hundred)).toFixed(4);
+      const pine = 3 + (seed % 22);
+      return {
+        success: true,
+        total_fuel_load: total,
+        one_hour_fuel: one,
+        ten_hour_fuel: ten,
+        hundred_hour_fuel: hundred,
+        pine_cone_count: pine
+      };
+    }
+
+    function pickRuntimeMs() {
+      const v = el.runtimeSelect.value;
+      if (v === 'auto') {
+        return 40000 + Math.floor(Math.random() * 70000); // 40s..110s
+      }
+      return Number(v) * 1000;
+    }
+
+    el.folderInput.addEventListener('change', () => {
+      localImages = Array.from(el.folderInput.files || []).filter(f => isImageName(f.name));
+      localImages.sort((a, b) => a.name.localeCompare(b.name));
+
+      if (localImages.length === 0) {
+        el.selectedImage.innerHTML = '<option value="">No images found in folder</option>';
+        showPreview(null);
+        setStatus('No image files found in selected folder.', 'warn');
+        return;
+      }
+
+      el.selectedImage.innerHTML =
+        '<option value="">Select one image...</option>' +
+        localImages.map((f, idx) => `<option value="${idx}">${f.webkitRelativePath || f.name}</option>`).join('');
+      setStatus(`Loaded ${localImages.length} images from local folder.`, 'ok');
+    });
+
+    el.selectedImage.addEventListener('change', () => {
+      const idx = Number(el.selectedImage.value);
+      if (!Number.isInteger(idx) || idx < 0 || idx >= localImages.length) {
+        showPreview(null);
+        return;
+      }
+      showPreview(localImages[idx]);
+    });
+
+    el.startBtn.addEventListener('click', async () => {
+      const idx = Number(el.selectedImage.value);
+      const file = Number.isInteger(idx) && idx >= 0 ? localImages[idx] : null;
+      const imageType = el.imageType.value;
+      const estimateFuel = el.estimateFuel.checked;
+      const runtimeMs = pickRuntimeMs();
+
+      if (!file) {
+        setStatus('Please choose one prepared image first.', 'err');
+        return;
+      }
+
+      el.startBtn.disabled = true;
+      el.resultGrid.innerHTML = '';
+      el.resultState.textContent = 'Processing...';
+      el.rawJson.textContent = '{"message":"Simulating local demo pipeline..."}';
+      setProgress(0);
+      setStatus('Starting offline demo...');
+      startVisualTicker(runtimeMs);
+
+      try {
+        await new Promise((resolve) => setTimeout(resolve, runtimeMs));
+        const payload = {
+          mode: 'offline-demo',
+          image_name: file.name,
+          image_type: imageType,
+          estimate_fuel: estimateFuel,
+          fuel_estimation: estimateFuel ? generateMockFuelFromName(file.name) : null,
+          message: 'Demo finished without backend call.'
+        };
+        stopVisualTicker();
+        await fastCompleteTo100();
+        const elapsed = Date.now() - startMs;
+        el.elapsedLabel.textContent = `Elapsed: ${fmtMs(elapsed)}`;
+        el.rawJson.textContent = JSON.stringify(payload, null, 2);
+
+        if (!estimateFuel) {
+          setStatus('Completed (estimation disabled).', 'warn');
+          el.resultState.textContent = 'Demo completed. Estimation output is disabled.';
+        } else {
+          setStatus('Completed successfully.', 'ok');
+          el.resultState.textContent = 'Offline demo completed. Fuel estimation ready.';
+          renderResultCards(payload?.fuel_estimation || null);
+        }
+      } catch (err) {
+        stopVisualTicker();
+        setStatus(`Demo error: ${err.message}`, 'err');
+        el.resultState.textContent = 'Offline demo failed unexpectedly.';
+      } finally {
+        el.startBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

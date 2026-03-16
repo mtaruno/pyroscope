@@ -67,6 +67,9 @@ class ApiClient {
     if (metadata.longitude) formData.append('longitude', metadata.longitude);
     if (metadata.captured_at) formData.append('captured_at', metadata.captured_at);
     if (metadata.metadata) formData.append('metadata', JSON.stringify(metadata.metadata));
+    if (typeof metadata.estimate_fuel !== 'undefined') {
+      formData.append('estimate_fuel', String(Boolean(metadata.estimate_fuel)));
+    }
 
     const response = await fetch(`${API_BASE_URL}/images/upload`, {
       method: 'POST',

@@ -54,6 +54,27 @@ function App() {
   const [capturedPoints, setCapturedPoints] = useState(0)
   const [totalPoints, setTotalPoints] = useState(0)
   const finishHandledRef = useRef(false)
+  const [showFuelPromptModal, setShowFuelPromptModal] = useState(false)
+  const [fuelPromptScanId, setFuelPromptScanId] = useState(null)
+  const [fuelPromptReason, setFuelPromptReason] = useState('')
+  const [fuelUseLocalPhoto, setFuelUseLocalPhoto] = useState(true)
+  const [fuelLocalFile, setFuelLocalFile] = useState(null)
+  const [fuelPromptError, setFuelPromptError] = useState('')
+  const [fuelTask, setFuelTask] = useState({
+    visible: false,
+    collapsed: false,
+    status: 'idle', // idle | running | success | error
+    progress: 0,
+    stage: '',
+    elapsedMs: 0,
+    scanId: null,
+    fileName: '',
+    imageUrl: '',
+    result: null,
+    error: ''
+  })
+  const fuelProgressRef = useRef(null)
+  const fuelProgressStartRef = useRef(0)
 
   // Load scans from API on component mount
   useEffect(() => {
@@ -189,12 +210,12 @@ function App() {
         )
 
         if (progress?.status === 'completed' && !finishHandledRef.current) {
+          const finishedScanId = activeScanId
           finishHandledRef.current = true
           setIsScanning(false)
           setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
           setScanPhase('Scan complete')
-          // Go straight to scan results
-          await loadAndShowScanResult(activeScanId)
+          openFuelPrompt(finishedScanId, 'completed')
           setActiveScanId(null)
           setLatestCapture(null)
         }
@@ -206,6 +227,12 @@ function App() {
     const progressInterval = setInterval(poll, 1000)
     return () => clearInterval(progressInterval)
   }, [isScanning, activeScanId, totalPoints])
+
+  useEffect(() => {
+    return () => {
+      clearFuelProgressTicker()
+    }
+  }, [])
 
   // Poll latest waypoint capture while scanning
   useEffect(() => {
@@ -266,6 +293,147 @@ function App() {
       }
     } catch (error) {
       console.error('Failed to load scan result:', error)
+    }
+  }
+
+  const openFuelPrompt = (scanId, reason = 'stopped') => {
+    if (!scanId) return
+    setFuelPromptScanId(scanId)
+    setFuelPromptReason(reason)
+    setFuelUseLocalPhoto(true)
+    setFuelLocalFile(null)
+    setFuelPromptError('')
+    setShowFuelPromptModal(true)
+  }
+
+  const closeFuelPrompt = () => {
+    setShowFuelPromptModal(false)
+    setFuelPromptError('')
+  }
+
+  const getFuelStage = (progress) => {
+    if (progress < 12) return 'Uploading image to backend...'
+    if (progress < 35) return 'Validating payload and preparing model...'
+    if (progress < 62) return 'Running fuel inference...'
+    if (progress < 86) return 'Aggregating fuel metrics...'
+    return 'Finalizing response...'
+  }
+
+  const clearFuelProgressTicker = () => {
+    if (fuelProgressRef.current) {
+      clearInterval(fuelProgressRef.current)
+      fuelProgressRef.current = null
+    }
+  }
+
+  const startFuelProgressTicker = () => {
+    clearFuelProgressTicker()
+    fuelProgressStartRef.current = Date.now()
+    fuelProgressRef.current = setInterval(() => {
+      const elapsed = Date.now() - fuelProgressStartRef.current
+      const progress = Math.min(94, (elapsed / 120000) * 94)
+      setFuelTask(prev => ({
+        ...prev,
+        progress,
+        elapsedMs: elapsed,
+        stage: getFuelStage(progress)
+      }))
+    }, 250)
+  }
+
+  const completeFuelProgressFast = async () => {
+    await new Promise((resolve) => {
+      const start = Date.now()
+      const duration = 700
+      const from = fuelTask.progress
+      const step = () => {
+        const ratio = Math.min(1, (Date.now() - start) / duration)
+        const next = from + (100 - from) * ratio
+        setFuelTask(prev => ({
+          ...prev,
+          progress: next,
+          elapsedMs: Date.now() - fuelProgressStartRef.current,
+          stage: 'Finalizing response...'
+        }))
+        if (ratio < 1) {
+          requestAnimationFrame(step)
+        } else {
+          resolve()
+        }
+      }
+      requestAnimationFrame(step)
+    })
+  }
+
+  const fetchLatestCaptureFile = async (scanId) => {
+    const latest = await apiClient.getLatestCapture(scanId)
+    const relativeUrl = latest?.rgb_image_url || latest?.thermal_image_url
+    if (!relativeUrl) {
+      throw new Error('No latest capture image found for this scan. Please choose a local photo.')
+    }
+    const absoluteUrl = `${apiClient.getBaseUrl()}${relativeUrl}`
+    const response = await fetch(absoluteUrl)
+    if (!response.ok) {
+      throw new Error(`Failed to fetch latest capture image (${response.status})`)
+    }
+    const blob = await response.blob()
+    const ext = blob.type?.includes('png') ? 'png' : 'jpg'
+    return new File([blob], `scan_${scanId}_latest.${ext}`, { type: blob.type || 'image/jpeg' })
+  }
+
+  const handleConfirmFuelPrompt = async () => {
+    if (!fuelPromptScanId) return
+    if (fuelUseLocalPhoto && !fuelLocalFile) {
+      setFuelPromptError('Please select a local photo before starting estimation.')
+      return
+    }
+    closeFuelPrompt()
+
+    setFuelTask({
+      visible: true,
+      collapsed: false,
+      status: 'running',
+      progress: 0,
+      stage: 'Starting task...',
+      elapsedMs: 0,
+      scanId: fuelPromptScanId,
+      fileName: fuelUseLocalPhoto ? (fuelLocalFile?.name || '') : 'latest_capture_from_scan',
+      imageUrl: fuelUseLocalPhoto && fuelLocalFile ? URL.createObjectURL(fuelLocalFile) : '',
+      result: null,
+      error: ''
+    })
+
+    startFuelProgressTicker()
+    try {
+      const uploadFile = fuelUseLocalPhoto ? fuelLocalFile : await fetchLatestCaptureFile(fuelPromptScanId)
+      if (!fuelUseLocalPhoto && uploadFile) {
+        setFuelTask(prev => ({ ...prev, fileName: uploadFile.name, imageUrl: URL.createObjectURL(uploadFile) }))
+      }
+      const response = await apiClient.uploadImage(fuelPromptScanId, uploadFile, {
+        image_type: 'visible',
+        estimate_fuel: true
+      })
+
+      clearFuelProgressTicker()
+      await completeFuelProgressFast()
+
+      setFuelTask(prev => ({
+        ...prev,
+        status: 'success',
+        progress: 100,
+        stage: 'Fuel estimation completed.',
+        elapsedMs: Date.now() - fuelProgressStartRef.current,
+        result: response
+      }))
+    } catch (error) {
+      clearFuelProgressTicker()
+      setFuelTask(prev => ({
+        ...prev,
+        status: 'error',
+        stage: 'Fuel estimation failed.',
+        elapsedMs: Date.now() - fuelProgressStartRef.current,
+        error: error.message || 'Unknown error'
+      }))
     }
   }
 
@@ -339,7 +507,7 @@ function App() {
     setShowScanConfigModal(false)
     setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
     if (activeScanId) {
-      await loadAndShowScanResult(activeScanId)
+      openFuelPrompt(activeScanId, 'stopped')
       setActiveScanId(null)
       setLatestCapture(null)
     }
@@ -501,6 +669,124 @@ function App() {
         onCancel={() => setShowScanConfigModal(false)}
         onConfirm={handleConfirmStartScan}
       />
+      {showFuelPromptModal && (
+        <div className="scan-modal-overlay" role="dialog" aria-modal="true">
+          <div className="scan-modal-content fuel-prompt-modal">
+            <h3>Run Fuel Load Estimation?</h3>
+            <p className="fuel-prompt-desc">
+              Scan #{fuelPromptScanId} {fuelPromptReason === 'completed' ? 'completed' : 'stopped'}.
+              {' '}Do you want to run fuel estimation now?
+            </p>
+
+            <label className="fuel-checkbox">
+              <input
+                type="checkbox"
+                checked={fuelUseLocalPhoto}
+                onChange={(e) => {
+                  setFuelUseLocalPhoto(e.target.checked)
+                  setFuelPromptError('')
+                }}
+              />
+              Use local photo
+            </label>
+
+            {fuelUseLocalPhoto ? (
+              <div className="fuel-file-input-wrap">
+                <label htmlFor="fuel-local-file">Select local photo</label>
+                <input
+                  id="fuel-local-file"
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  onChange={(e) => {
+                    setFuelLocalFile(e.target.files?.[0] || null)
+                    setFuelPromptError('')
+                  }}
+                />
+              </div>
+            ) : (
+              <p className="fuel-prompt-hint">
+                The app will upload latest capture image from this scan.
+              </p>
+            )}
+
+            {fuelPromptError && <p className="fuel-prompt-error">{fuelPromptError}</p>}
+
+            <div className="scan-prompt-actions">
+              <button
+                className="scan-prompt-btn scan-prompt-cancel"
+                onClick={closeFuelPrompt}
+              >
+                Skip
+              </button>
+              <button
+                className="scan-prompt-btn scan-prompt-confirm"
+                onClick={handleConfirmFuelPrompt}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {fuelTask.visible && (
+        <aside className={`fuel-task-toast ${fuelTask.collapsed ? 'collapsed' : ''}`}>
+          <div className="fuel-task-header">
+            <div>
+              <strong>Fuel Estimation</strong>
+              <div className={`fuel-task-status ${fuelTask.status}`}>
+                {fuelTask.status === 'running' && 'Running...'}
+                {fuelTask.status === 'success' && 'Completed'}
+                {fuelTask.status === 'error' && 'Failed'}
+              </div>
+            </div>
+            <div className="fuel-task-header-actions">
+              <button
+                className="fuel-task-mini-btn"
+                onClick={() => setFuelTask(prev => ({ ...prev, collapsed: !prev.collapsed }))}
+              >
+                {fuelTask.collapsed ? 'Expand' : 'Collapse'}
+              </button>
+              <button
+                className="fuel-task-mini-btn close"
+                onClick={() => setFuelTask(prev => ({ ...prev, visible: false }))}
+              >
+                x
+              </button>
+            </div>
+          </div>
+          {!fuelTask.collapsed && (
+            <div className="fuel-task-body">
+              <div className="fuel-task-progress-wrap">
+                <div className="fuel-task-progress-bar" style={{ width: `${Math.max(0, Math.min(100, fuelTask.progress))}%` }} />
+              </div>
+              <div className="fuel-task-meta">
+                <span>{Math.round(fuelTask.progress)}%</span>
+                <span>{Math.floor(fuelTask.elapsedMs / 1000)}s</span>
+              </div>
+              <p className="fuel-task-stage">{fuelTask.stage}</p>
+              {fuelTask.fileName && <p className="fuel-task-file">File: {fuelTask.fileName}</p>}
+
+              {fuelTask.imageUrl && (
+                <img className="fuel-task-image" src={fuelTask.imageUrl} alt="Uploaded local sample" />
+              )}
+
+              {fuelTask.status === 'error' && (
+                <p className="fuel-task-error">{fuelTask.error}</p>
+              )}
+
+              {fuelTask.status === 'success' && (
+                <div className="fuel-task-results">
+                  <p>Total: <strong>{fuelTask.result?.fuel_estimation?.total_fuel_load ?? 'N/A'}</strong> tons/acre</p>
+                  <p>1-Hour: <strong>{fuelTask.result?.fuel_estimation?.one_hour_fuel ?? 'N/A'}</strong></p>
+                  <p>10-Hour: <strong>{fuelTask.result?.fuel_estimation?.ten_hour_fuel ?? 'N/A'}</strong></p>
+                  <p>100-Hour: <strong>{fuelTask.result?.fuel_estimation?.hundred_hour_fuel ?? 'N/A'}</strong></p>
+                  <p>Pine Cones: <strong>{fuelTask.result?.fuel_estimation?.pine_cone_count ?? 'N/A'}</strong></p>
+                </div>
+              )}
+            </div>
+          )}
+        </aside>
+      )}
     </div>
   )
 }
