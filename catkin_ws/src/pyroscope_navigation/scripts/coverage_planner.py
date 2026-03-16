@@ -66,6 +66,7 @@ class CoveragePlanner:
         self.latest_costmap = None
         self.latest_costmap_stamp = None
         self.latest_map = None  # raw SLAM /map (0=free, 100=occupied, -1=unknown)
+        self.goal_frame = "map"  # will fall back to "odom" if SLAM unavailable
         # Publishers
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         self.capture_ready_pub = rospy.Publisher('/coverage/capture_ready', Bool, queue_size=1)
@@ -106,12 +107,12 @@ class CoveragePlanner:
         origin_x = self.origin_x
         origin_y = self.origin_y
         try:
-            trans, _ = self.tf_listener.lookupTransform('map', 'base_link', rospy.Time(0))
+            trans, _ = self.tf_listener.lookupTransform(self.goal_frame, 'base_link', rospy.Time(0))
             origin_x = trans[0]
             origin_y = trans[1]
-            rospy.loginfo("Centring waypoint grid on robot map-frame pose (%.2f, %.2f)", origin_x, origin_y)
+            rospy.loginfo("Centring waypoint grid on robot %s-frame pose (%.2f, %.2f)", self.goal_frame, origin_x, origin_y)
         except (tf.Exception, tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
-            rospy.logwarn("Cannot get map-frame pose -- using origin params (%.2f, %.2f)", origin_x, origin_y)
+            rospy.logwarn("Cannot get %s-frame pose -- using origin params (%.2f, %.2f)", self.goal_frame, origin_x, origin_y)
 
         min_x = origin_x - self.area_width / 2.0 + WALL_MARGIN
         max_x = origin_x + self.area_width / 2.0 - WALL_MARGIN
@@ -198,8 +199,11 @@ class CoveragePlanner:
         self.cmd_vel_pub.publish(Twist())
 
     def get_robot_pose(self):
-        # Prefer map frame (SLAM-corrected); fall back to odom if map not yet available
-        for frame in ('map', 'odom'):
+        # Prefer goal_frame; fall back to other frame if unavailable
+        frames = [self.goal_frame]
+        fallback = 'odom' if self.goal_frame == 'map' else 'map'
+        frames.append(fallback)
+        for frame in frames:
             try:
                 common_time = self.tf_listener.getLatestCommonTime(frame, 'base_link')
                 trans, rot = self.tf_listener.lookupTransform(frame, 'base_link', rospy.Time(0))
@@ -498,7 +502,7 @@ class CoveragePlanner:
             return False
 
         goal = MoveBaseGoal()
-        goal.target_pose.header.frame_id = "map"
+        goal.target_pose.header.frame_id = self.goal_frame
         goal.target_pose.header.stamp = rospy.Time.now()
         goal.target_pose.pose.position.x = x
         goal.target_pose.pose.position.y = y
@@ -583,7 +587,7 @@ class CoveragePlanner:
         array = MarkerArray()
         for i, (x, y) in enumerate(self.waypoints):
             m = Marker()
-            m.header.frame_id = "map"
+            m.header.frame_id = self.goal_frame
             m.header.stamp = rospy.Time.now()
             m.ns = "coverage_waypoints"
             m.id = i
@@ -612,19 +616,37 @@ class CoveragePlanner:
         self.waypoint_markers_pub.publish(array)
 
     def run(self):
-        # Wait for SLAM map and costmap to populate from lidar
-        rospy.loginfo("Waiting for SLAM map and costmap to initialize...")
-        deadline = rospy.Time.now() + rospy.Duration(30.0)
+        # Wait for SLAM map (short timeout -- fall back to odom if SLAM not available)
+        rospy.loginfo("Waiting for SLAM map (up to 10s)...")
+        deadline = rospy.Time.now() + rospy.Duration(10.0)
         rate = rospy.Rate(2)
+        slam_available = False
         while not rospy.is_shutdown() and rospy.Time.now() < deadline:
-            age = self.get_costmap_age()
-            map_ready = self.latest_map is not None
-            if age is not None and age < self.costmap_stale_timeout and map_ready:
-                rospy.loginfo("SLAM map and costmap ready -- generating waypoints")
+            # Check if map->odom TF exists (meaning gmapping is running)
+            try:
+                self.tf_listener.lookupTransform('map', 'odom', rospy.Time(0))
+                slam_available = True
+            except (tf.Exception, tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException):
+                pass
+            if slam_available and self.latest_map is not None:
+                rospy.loginfo("SLAM map ready -- using map frame for goals")
                 break
             rate.sleep()
+
+        if slam_available:
+            self.goal_frame = "map"
         else:
-            rospy.logwarn("Map/costmap not fully ready after 30s -- generating waypoints anyway")
+            self.goal_frame = "odom"
+            rospy.logwarn("SLAM not available -- falling back to odom frame for goals")
+
+        # Also wait briefly for costmap (needed for snap_to_free)
+        costmap_deadline = rospy.Time.now() + rospy.Duration(5.0)
+        while not rospy.is_shutdown() and rospy.Time.now() < costmap_deadline:
+            age = self.get_costmap_age()
+            if age is not None and age < self.costmap_stale_timeout:
+                rospy.loginfo("Costmap ready")
+                break
+            rate.sleep()
 
         # Generate waypoints from confirmed free cells in the SLAM map
         self.generate_waypoints()
