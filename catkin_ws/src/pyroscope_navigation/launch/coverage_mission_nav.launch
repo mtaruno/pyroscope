@@ -35,6 +35,9 @@
         <rosparam file="$(find pyroscope_navigation)/config/local_costmap.yaml" command="load"/>
         <rosparam file="$(find pyroscope_navigation)/config/dwa_planner.yaml" command="load"/>
 
+        <!-- Transform tolerance (high for WiFi TF latency between Jetson and remote PC) -->
+        <param name="transform_tolerance" value="1.0"/>
+
         <!-- Planner frequency -->
         <param name="planner_frequency" value="1.0"/>
         <param name="controller_frequency" value="5.0"/>
