@@ -66,7 +66,7 @@ class CoveragePlanner:
         self.latest_costmap = None
         self.latest_costmap_stamp = None
         self.latest_map = None  # raw SLAM /map (0=free, 100=occupied, -1=unknown)
-        self.goal_frame = "map"  # SLAM map frame for goals and markers
+        self.goal_frame = "odom"  # updated to "map" in run() if SLAM is available
         self.visited_positions = []  # list of (x, y) where we already captured
         self.mission_start_x = 0.0
         self.mission_start_y = 0.0

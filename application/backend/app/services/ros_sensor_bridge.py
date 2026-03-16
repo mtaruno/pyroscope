@@ -39,6 +39,7 @@ _ros_cache: Dict[str, Any] = {
     "voltage": None,
     "battery_percent": None,
     "capture_ready_queue": [],
+    "coverage_complete": threading.Event(),  # set when /coverage/complete=true received
     "lock": threading.Lock(),
     "capture_ready_condition": threading.Condition(),
 }
@@ -229,6 +230,11 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
             _ros_cache["capture_ready_queue"].append(True)
             _ros_cache["capture_ready_condition"].notify_all()
 
+    def cb_coverage_complete(msg):
+        if msg.data is True:
+            _ros_cache["coverage_complete"].set()
+            logger.warning("Coverage mission complete signal received from planner")
+
     def _set_voltage(voltage_value):
         with _ros_cache["lock"]:
             _ros_cache["voltage"] = voltage_value
@@ -256,6 +262,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
     rospy.Subscriber("/sensors/sht40/humidity", Float64, cb_hum, queue_size=1)
     rospy.Subscriber("/sensors/thermal/mean", Float64, cb_thermal_mean, queue_size=1)
     rospy.Subscriber("/coverage/capture_ready", Bool, cb_capture_ready, queue_size=50)
+    rospy.Subscriber("/coverage/complete", Bool, cb_coverage_complete, queue_size=1)
     topic_types = {}
     try:
         topic_types = {name: t for name, t in rospy.get_published_topics()}
@@ -341,6 +348,12 @@ def clear_capture_ready_queue() -> None:
     condition = _ros_cache["capture_ready_condition"]
     with condition:
         _ros_cache["capture_ready_queue"].clear()
+    _ros_cache["coverage_complete"].clear()
+
+
+def is_coverage_complete() -> bool:
+    """Return True if /coverage/complete=true has been received since last clear."""
+    return _ros_cache["coverage_complete"].is_set()
 
 
 def is_ros_configured() -> bool:
