@@ -22,6 +22,10 @@ slam_gmapping:
   angularUpdate: 0.05
   temporalUpdate: 3.0
 
+  # TF tolerance for WiFi latency between Jetson and remote PC
+  transform_publish_period: 0.1
+  tf_delay: 1.0
+
   # Particle filter
   particles: 30
   resampleThreshold: 0.5

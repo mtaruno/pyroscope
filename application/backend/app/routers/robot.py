@@ -144,6 +144,24 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
             if 'venv' not in p
         )
 
+        # Kill stale ROS nodes from previous missions to prevent
+        # "new node registered with same name" conflicts
+        cleanup_cmd = (
+            'source /opt/ros/melodic/setup.bash && '
+            'source ~/pyroscope/catkin_ws/devel/setup.bash && '
+            'rosnode kill /slam_gmapping /move_base /coverage_planner /base_to_laser_tf_nav 2>/dev/null; '
+            'sleep 1'
+        )
+        try:
+            subprocess.run(
+                ['bash', '-c', cleanup_cmd],
+                env=clean_env,
+                timeout=5,
+                capture_output=True,
+            )
+        except Exception:
+            pass  # cleanup is best-effort
+
         ros_cmd = (
             f'source /opt/ros/melodic/setup.bash && '
             f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
