@@ -602,6 +602,18 @@ class CoveragePlanner:
         )
         self.progress_pub.publish(String(data=msg))
 
+    def clear_old_markers(self):
+        """Delete all previous waypoint markers from RViz."""
+        array = MarkerArray()
+        m = Marker()
+        m.header.frame_id = self.goal_frame
+        m.header.stamp = rospy.Time.now()
+        m.ns = "coverage_waypoints"
+        m.id = 0
+        m.action = Marker.DELETEALL
+        array.markers.append(m)
+        self.waypoint_markers_pub.publish(array)
+
     def publish_waypoint_markers(self):
         """Publish all waypoints as RViz markers: grey=pending, green=done, yellow=current target."""
         array = MarkerArray()
