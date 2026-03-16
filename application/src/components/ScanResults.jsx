@@ -13,6 +13,8 @@ function ScanResults({ scanData, onBack }) {
   const [samplesData, setSamplesData] = useState(null)
   const [showSamples, setShowSamples] = useState(true)
   const [loadingSamples, setLoadingSamples] = useState(false)
+  const SAMPLE_RETRY_LIMIT = 5
+  const SAMPLE_RETRY_DELAY_MS = 1000
 
   useEffect(() => {
     setPointData(null)
@@ -41,21 +43,40 @@ function ScanResults({ scanData, onBack }) {
 
   // Load waypoint samples when toggled
   useEffect(() => {
-    const loadSamples = async () => {
-      if (showSamples && !samplesData && scanId) {
-        setLoadingSamples(true)
-        try {
-          const data = await apiClient.getScanSamples(scanId, { limit: 200 })
-          setSamplesData(data)
-        } catch (error) {
+    if (!showSamples || !scanId) return
+
+    let cancelled = false
+    let retryTimeout = null
+
+    const loadSamples = async (attempt = 0) => {
+      setLoadingSamples(true)
+      try {
+        const data = await apiClient.getScanSamples(scanId, { limit: 200 })
+        if (cancelled) return
+        setSamplesData(data)
+        if ((data?.total || 0) === 0 && attempt < SAMPLE_RETRY_LIMIT) {
+          retryTimeout = setTimeout(() => {
+            loadSamples(attempt + 1)
+          }, SAMPLE_RETRY_DELAY_MS)
+        }
+      } catch (error) {
+        if (!cancelled) {
           console.error('Failed to load waypoint samples:', error)
-        } finally {
+        }
+      } finally {
+        if (!cancelled) {
           setLoadingSamples(false)
         }
       }
     }
+
     loadSamples()
-  }, [showSamples, scanId, samplesData])
+
+    return () => {
+      cancelled = true
+      if (retryTimeout) clearTimeout(retryTimeout)
+    }
+  }, [showSamples, scanId])
   return (
     <div className="scan-results">
       {/* Header */}

@@ -136,6 +136,59 @@ def _mark_capture_completed(scan_id: int) -> None:
     _mark_scan_completed(scan_id)
 
 
+def _store_capture_images(
+    scan_id: int,
+    sample_id: int,
+    sequence_index: int,
+    captured_at: datetime,
+    thermal_image_path: Optional[str],
+    rgb_waypoint_path: Optional[str],
+) -> None:
+    db = SessionLocal()
+    try:
+        if thermal_image_path and os.path.exists(thermal_image_path):
+            existing = db.query(ScanImage).filter(
+                ScanImage.scan_id == scan_id,
+                ScanImage.image_type == ImageType.thermal_latest,
+            ).first()
+            if existing:
+                existing.file_path = thermal_image_path
+                existing.captured_at = captured_at
+            else:
+                db.add(ScanImage(
+                    scan_id=scan_id,
+                    image_type=ImageType.thermal_latest,
+                    file_path=thermal_image_path,
+                    mime_type="image/jpeg",
+                    captured_at=captured_at,
+                ))
+
+        if rgb_waypoint_path and os.path.exists(rgb_waypoint_path):
+            rgb_image = ScanImage(
+                scan_id=scan_id,
+                image_type=ImageType.visible,
+                file_path=rgb_waypoint_path,
+                mime_type="image/jpeg",
+                captured_at=captured_at,
+                meta_data={"sequence_index": sequence_index},
+            )
+            db.add(rgb_image)
+            db.flush()
+
+            sample = db.query(ScanWaypointSample).filter(
+                ScanWaypointSample.id == sample_id
+            ).first()
+            if sample:
+                sample.rgb_image_id = rgb_image.id
+
+        db.commit()
+    except Exception as e:
+        logger.error("Failed to save capture images for waypoint %d: %s", sequence_index, e, exc_info=True)
+        db.rollback()
+    finally:
+        db.close()
+
+
 def _capture_loop_impl(scan_id: int):
     stop_event = _capture_state["stop_event"]
     if not stop_event:
@@ -198,8 +251,9 @@ def _capture_loop_impl(scan_id: int):
             rgb_waypoint_path = None  # no RealSense in subprocess mode
 
         db = SessionLocal()
+        sample_id = None
+        now = datetime.utcnow()
         try:
-            now = datetime.utcnow()
             sample = ScanWaypointSample(
                 scan_id=scan_id,
                 sequence_index=sequence_index,
@@ -209,40 +263,8 @@ def _capture_loop_impl(scan_id: int):
                 thermal_mean=thermal_data.get("thermal_mean"),
             )
             db.add(sample)
-
-            # Upsert single "thermal_latest" ScanImage for this scan
-            image_path = thermal_data.get("image_path")
-            if image_path and os.path.exists(image_path):
-                existing = db.query(ScanImage).filter(
-                    ScanImage.scan_id == scan_id,
-                    ScanImage.image_type == ImageType.thermal_latest,
-                ).first()
-                if existing:
-                    existing.file_path = image_path
-                    existing.captured_at = now
-                else:
-                    db.add(ScanImage(
-                        scan_id=scan_id,
-                        image_type=ImageType.thermal_latest,
-                        file_path=image_path,
-                        mime_type="image/jpeg",
-                        captured_at=now,
-                    ))
-
-            # Save per-waypoint RealSense RGB image
-            if rgb_waypoint_path and os.path.exists(rgb_waypoint_path):
-                rgb_image = ScanImage(
-                    scan_id=scan_id,
-                    image_type=ImageType.visible,
-                    file_path=rgb_waypoint_path,
-                    mime_type="image/jpeg",
-                    captured_at=now,
-                    meta_data={"sequence_index": sequence_index},
-                )
-                db.add(rgb_image)
-                db.flush()  # get rgb_image.id before linking
-                sample.rgb_image_id = rgb_image.id
-
+            db.flush()
+            sample_id = sample.id
             db.commit()
             with _capture_state_lock:
                 _capture_state["captured_points"] = sequence_index + 1
@@ -258,6 +280,15 @@ def _capture_loop_impl(scan_id: int):
         finally:
             db.close()
             total_points = _capture_state["total_points"]
+        if sample_id is not None:
+            _store_capture_images(
+                scan_id=scan_id,
+                sample_id=sample_id,
+                sequence_index=sequence_index,
+                captured_at=now,
+                thermal_image_path=thermal_data.get("image_path"),
+                rgb_waypoint_path=rgb_waypoint_path,
+            )
         sequence_index += 1
         if total_points and sequence_index >= total_points:
             _mark_capture_completed(scan_id)

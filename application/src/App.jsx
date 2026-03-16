@@ -652,7 +652,7 @@ function App() {
   if (showResults && scanResultData) {
     return (
       <>
-        <ScanResults scanData={scanResultData} onBack={handleBackFromResults} />
+        <ScanResults key={scanResultData.id || scanResultData.scanId} scanData={scanResultData} onBack={handleBackFromResults} />
         {showFuelPromptModal && (
           <div className="scan-modal-overlay" role="dialog" aria-modal="true">
             <div className="scan-modal-content fuel-prompt-modal">
