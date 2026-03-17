@@ -116,6 +116,49 @@ def _cleanup_mission_nodes(clean_env: dict) -> None:
         pass
 
 
+def shutdown_active_mission() -> None:
+    """Best-effort cleanup for app shutdown outside the HTTP mission-stop route."""
+    global mission_process
+
+    try:
+        stop_capture_loop()
+    except Exception:
+        pass
+
+    if mission_process is not None and mission_process.poll() is None:
+        try:
+            pgid = os.getpgid(mission_process.pid)
+            if pgid != os.getpgrp():
+                os.killpg(pgid, signal.SIGTERM)
+            else:
+                mission_process.terminate()
+            mission_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                pgid = os.getpgid(mission_process.pid)
+                if pgid != os.getpgrp():
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    mission_process.kill()
+            except Exception:
+                pass
+        except Exception:
+            pass
+        mission_process = None
+
+    clean_env = _build_clean_env()
+    _cleanup_mission_nodes(clean_env)
+
+    try:
+        stop_cmd = (
+            'source /opt/ros/melodic/setup.bash && '
+            'rostopic pub -1 /cmd_vel geometry_msgs/Twist "{}"'
+        )
+        subprocess.Popen(['bash', '-c', stop_cmd], env=clean_env)
+    except Exception:
+        pass
+
+
 def _ensure_ros_bridge_for_status() -> None:
     """Ensure ROS bridge is running so /voltage can be consumed for battery status."""
     if not is_ros_configured():

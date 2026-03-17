@@ -29,6 +29,7 @@ class WaypointController:
         self.turn_in_place_linear_vel = rospy.get_param('~turn_in_place_linear_vel', 0.0)
         self.progress_epsilon = rospy.get_param('~progress_epsilon', 0.03)  # meters
         self.stall_timeout = rospy.get_param('~stall_timeout', 4.0)  # seconds
+        self.manual_override_timeout = rospy.get_param('~manual_override_timeout', 1.0)  # seconds
 
         # State variables
         self.current_pose = None
@@ -36,6 +37,7 @@ class WaypointController:
         self.goal_reached = False
         self.last_progress_time = rospy.Time.now()
         self.last_distance = None
+        self.manual_override_until = rospy.Time(0)
 
         # Publishers
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
@@ -47,6 +49,7 @@ class WaypointController:
         rospy.Subscriber('/odom', Odometry, self.odom_callback)
         # rospy.Subscriber('/zed2i/odom', Odometry, self.odom_callback)  # ZED camera odometry
         rospy.Subscriber('/nav/target_waypoint', PoseStamped, self.target_callback)
+        rospy.Subscriber('/nav/manual_override', Bool, self.manual_override_callback, queue_size=1)
 
         # Control loop timer
         self.control_timer = rospy.Timer(rospy.Duration(1.0/self.control_frequency), self.control_loop)
@@ -76,6 +79,16 @@ class WaypointController:
         self.last_progress_time = rospy.Time.now()
         rospy.loginfo("New target: ({:.2f}, {:.2f})".format(msg.pose.position.x, msg.pose.position.y))
 
+    def manual_override_callback(self, msg):
+        """Pause autonomous control briefly while manual teleop is active."""
+        if bool(msg.data):
+            self.manual_override_until = rospy.Time.now() + rospy.Duration(self.manual_override_timeout)
+            self.last_progress_time = rospy.Time.now()
+            self.stalled_pub.publish(Bool(data=False))
+
+    def is_manual_override_active(self):
+        return rospy.Time.now() < self.manual_override_until
+
     def get_yaw_from_quaternion(self, orientation):
         """Extract yaw angle from quaternion"""
         quaternion = (
@@ -99,6 +112,9 @@ class WaypointController:
         """Calculate velocity commands using proportional control"""
         if self.current_pose is None or self.target_waypoint is None:
             return Twist()  # Zero velocity
+
+        if self.is_manual_override_active():
+            return Twist()
 
         # Calculate distance and angle to target
         dx = self.target_waypoint.pose.position.x - self.current_pose.position.x
@@ -148,6 +164,9 @@ class WaypointController:
 
     def control_loop(self, event):
         """Main control loop - called at fixed frequency"""
+        if self.is_manual_override_active():
+            self.cmd_vel_pub.publish(Twist())
+            return
         cmd = self.calculate_control()
         self.cmd_vel_pub.publish(cmd)
 

@@ -37,6 +37,7 @@ def _teleop_thread() -> None:
     try:
         import rospy
         from geometry_msgs.msg import Twist
+        from std_msgs.msg import Bool
     except ImportError as e:
         _teleop_state["error"] = str(e)
         _teleop_state["ready_event"].set()
@@ -55,6 +56,7 @@ def _teleop_thread() -> None:
         return
 
     publisher = rospy.Publisher("/cmd_vel", Twist, queue_size=10)
+    manual_override_pub = rospy.Publisher("/nav/manual_override", Bool, queue_size=10)
     rate = rospy.Rate(TELEOP_PUBLISH_HZ)
     zero_sent = False
 
@@ -74,9 +76,11 @@ def _teleop_thread() -> None:
             twist.linear.x = linear_x
             twist.angular.z = angular_z
             publisher.publish(twist)
+            manual_override_pub.publish(Bool(data=True))
             zero_sent = False
         elif not zero_sent:
             publisher.publish(Twist())
+            manual_override_pub.publish(Bool(data=False))
             zero_sent = True
 
         try:
