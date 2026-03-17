@@ -10,6 +10,7 @@
   <arg name="stop_distance" default="0.30" />
   <arg name="front_arc_degrees" default="30.0" />
   <arg name="dwell_time" default="1.0" />
+  <arg name="settle_time" default="0.5" />
   <arg name="goal_timeout" default="25.0" />
 
   <arg name="x1" default="1.0" />
@@ -46,6 +47,7 @@
   <node pkg="pyroscope_navigation" type="demo_waypoint_sequence.py" name="demo_waypoint_sequence" output="screen">
     <param name="frame_id" value="odom" />
     <param name="dwell_time" value="$(arg dwell_time)" />
+    <param name="settle_time" value="$(arg settle_time)" />
     <param name="goal_timeout" value="$(arg goal_timeout)" />
     <param name="skip_on_stall" value="true" />
     <param name="x1" value="$(arg x1)" />

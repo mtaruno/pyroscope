@@ -30,6 +30,17 @@ _battery_sim_state = {
     "beep_triggered": False,         # once beep starts, battery forced to 1%
 }
 
+_MISSION_NODE_NAMES = [
+    "/slam_gmapping",
+    "/move_base",
+    "/coverage_planner",
+    "/base_to_laser_tf_nav",
+    "/waypoint_controller",
+    "/lidar_obstacle_detector",
+    "/safety_stop",
+    "/demo_waypoint_sequence",
+]
+
 
 def _today_key() -> str:
     return datetime.now().strftime("%Y-%m-%d")
@@ -72,6 +83,37 @@ def _get_simulated_battery_percent() -> Optional[int]:
         _mark_beep_triggered()
         return 1
     return simulated
+
+
+def _build_clean_env() -> dict:
+    clean_env = {
+        k: v for k, v in os.environ.items()
+        if k not in ('VIRTUAL_ENV', 'PYTHONHOME', 'PYTHONPATH', 'CONDA_DEFAULT_ENV')
+    }
+    clean_env['PATH'] = ':'.join(
+        p for p in clean_env.get('PATH', '').split(':')
+        if 'venv' not in p
+    )
+    return clean_env
+
+
+def _cleanup_mission_nodes(clean_env: dict) -> None:
+    node_list = " ".join(_MISSION_NODE_NAMES)
+    cleanup_cmd = (
+        'source /opt/ros/melodic/setup.bash && '
+        'source ~/pyroscope/catkin_ws/devel/setup.bash && '
+        f'rosnode kill {node_list} 2>/dev/null; '
+        'sleep 1'
+    )
+    try:
+        subprocess.run(
+            ['bash', '-c', cleanup_cmd],
+            env=clean_env,
+            timeout=5,
+            capture_output=True,
+        )
+    except Exception:
+        pass
 
 
 def _ensure_ros_bridge_for_status() -> None:
@@ -256,33 +298,8 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
 
         # Build a clean env that removes the Python 3.9 venv but
         # keeps the normal system environment intact for ROS
-        clean_env = {
-            k: v for k, v in os.environ.items()
-            if k not in ('VIRTUAL_ENV', 'PYTHONHOME', 'PYTHONPATH', 'CONDA_DEFAULT_ENV')
-        }
-        # Remove venv bin directory from PATH
-        clean_env['PATH'] = ':'.join(
-            p for p in clean_env.get('PATH', '').split(':')
-            if 'venv' not in p
-        )
-
-        # Kill stale ROS nodes from previous missions to prevent
-        # "new node registered with same name" conflicts
-        cleanup_cmd = (
-            'source /opt/ros/melodic/setup.bash && '
-            'source ~/pyroscope/catkin_ws/devel/setup.bash && '
-            'rosnode kill /slam_gmapping /move_base /coverage_planner /base_to_laser_tf_nav 2>/dev/null; '
-            'sleep 1'
-        )
-        try:
-            subprocess.run(
-                ['bash', '-c', cleanup_cmd],
-                env=clean_env,
-                timeout=5,
-                capture_output=True,
-            )
-        except Exception:
-            pass  # cleanup is best-effort
+        clean_env = _build_clean_env()
+        _cleanup_mission_nodes(clean_env)
 
         if config.mission_mode == "demo_waypoints":
             demo_rectangle = _calc_demo_rectangle(
@@ -386,16 +403,16 @@ async def stop_coverage_mission(db: Session = Depends(get_db)):
             pass
         mission_process = None  # noqa: PLW0602
 
+    clean_env = _build_clean_env()
+    _cleanup_mission_nodes(clean_env)
+
     # Stop the rover immediately by publishing zero velocity
     try:
         stop_cmd = (
             'source /opt/ros/melodic/setup.bash && '
             'rostopic pub -1 /cmd_vel geometry_msgs/Twist "{}"'
         )
-        subprocess.Popen(['bash', '-c', stop_cmd], env={
-            k: v for k, v in os.environ.items()
-            if k not in ('VIRTUAL_ENV', 'PYTHONHOME', 'PYTHONPATH', 'CONDA_DEFAULT_ENV')
-        })
+        subprocess.Popen(['bash', '-c', stop_cmd], env=clean_env)
     except Exception:
         pass
 

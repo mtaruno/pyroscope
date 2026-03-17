@@ -6,7 +6,7 @@ Publishes four odom-frame waypoints one at a time to waypoint_controller.py.
 """
 
 import rospy
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Twist
 from std_msgs.msg import Bool, String
 
 
@@ -18,6 +18,7 @@ class DemoWaypointSequence:
         self.dwell_time = rospy.get_param('~dwell_time', 1.0)
         self.goal_timeout = rospy.get_param('~goal_timeout', 25.0)
         self.skip_on_stall = rospy.get_param('~skip_on_stall', True)
+        self.settle_time = rospy.get_param('~settle_time', 0.5)
 
         self.waypoints = [
             (rospy.get_param('~x1', 1.0), rospy.get_param('~y1', 0.0)),
@@ -30,6 +31,7 @@ class DemoWaypointSequence:
         self.progress_stalled = False
 
         self.target_pub = rospy.Publisher('/nav/target_waypoint', PoseStamped, queue_size=1)
+        self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         self.capture_ready_pub = rospy.Publisher('/coverage/capture_ready', Bool, queue_size=1)
         self.progress_pub = rospy.Publisher('/coverage/progress', String, queue_size=1)
         self.complete_pub = rospy.Publisher('/coverage/complete', Bool, queue_size=1)
@@ -65,14 +67,28 @@ class DemoWaypointSequence:
         msg = "{}/{} waypoints ({}%)".format(done, total, percent)
         self.progress_pub.publish(String(data=msg))
 
+    def publish_status(self, text):
+        self.progress_pub.publish(String(data=text))
+
+    def publish_stop(self):
+        self.cmd_vel_pub.publish(Twist())
+
     def publish_capture_ready_window(self):
-        end_time = rospy.Time.now() + rospy.Duration(self.dwell_time)
+        settle_end = rospy.Time.now() + rospy.Duration(self.settle_time)
+        dwell_end = settle_end + rospy.Duration(self.dwell_time)
         rate = rospy.Rate(10)
 
-        while not rospy.is_shutdown() and rospy.Time.now() < end_time:
+        while not rospy.is_shutdown() and rospy.Time.now() < settle_end:
+            self.publish_stop()
+            self.capture_ready_pub.publish(Bool(data=False))
+            rate.sleep()
+
+        while not rospy.is_shutdown() and rospy.Time.now() < dwell_end:
+            self.publish_stop()
             self.capture_ready_pub.publish(Bool(data=True))
             rate.sleep()
 
+        self.publish_stop()
         self.capture_ready_pub.publish(Bool(data=False))
 
     def wait_for_result(self):
@@ -104,22 +120,31 @@ class DemoWaypointSequence:
                 return
 
             rospy.loginfo("Starting waypoint %d/%d", index, len(self.waypoints))
+            self.publish_status("Navigating to waypoint {}/{}".format(index, len(self.waypoints)))
             self.publish_waypoint(x, y)
             result = self.wait_for_result()
 
             if result == 'reached':
                 rospy.loginfo("Waypoint %d reached", index)
+                self.publish_status(
+                    "Dwelling at waypoint {}/{} for {:.1f}s".format(
+                        index, len(self.waypoints), self.dwell_time
+                    )
+                )
                 self.publish_capture_ready_window()
             elif result == 'stalled':
                 rospy.logwarn("Waypoint %d stalled, skipping", index)
+                self.publish_stop()
             elif result == 'timeout':
                 rospy.logwarn("Waypoint %d timed out after %.1f s, skipping", index, self.goal_timeout)
+                self.publish_stop()
             else:
                 return
 
             self.publish_progress(index)
 
         rospy.loginfo("Demo waypoint sequence complete")
+        self.publish_stop()
         self.complete_pub.publish(Bool(data=True))
 
 
