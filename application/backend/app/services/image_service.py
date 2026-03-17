@@ -93,6 +93,19 @@ class ImageService:
             "pine_cone_count": pine_cone_count,
         }
 
+    @staticmethod
+    def _merge_fuel_estimation_metadata(image: ScanImage, result: Dict[str, Any]) -> None:
+        meta_data = image.meta_data.copy() if isinstance(image.meta_data, dict) else {}
+        meta_data["fuel_estimation"] = {
+            "total_fuel_load": result.get("total_fuel_load"),
+            "one_hour_fuel": result.get("one_hour_fuel"),
+            "ten_hour_fuel": result.get("ten_hour_fuel"),
+            "hundred_hour_fuel": result.get("hundred_hour_fuel"),
+            "pine_cone_count": result.get("pine_cone_count"),
+            "estimated_at": datetime.utcnow().isoformat(),
+        }
+        image.meta_data = meta_data
+
     def estimate_fuel_for_image_path(self, image_path: str) -> Dict[str, Any]:
         api_url = (settings.FUEL_ESTIMATION_API_URL or "").strip()
         if not api_url:
@@ -178,6 +191,7 @@ class ImageService:
         for image in images:
             result = self.estimate_fuel_for_image_path(image.file_path)
             if result.get("success"):
+                self._merge_fuel_estimation_metadata(image, result)
                 successful.append({
                     "image_id": image.id,
                     "file_path": image.file_path,

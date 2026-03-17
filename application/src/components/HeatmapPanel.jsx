@@ -70,7 +70,7 @@ function BoundaryLayer({ dataPoints }) {
     return null
 }
 
-function HeatmapPanel({ scanId, centerLat, centerLng }) {
+function HeatmapPanel({ scanId, centerLat, centerLng, refreshKey }) {
     const [heatmapData, setHeatmapData] = useState(null)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState(null)
@@ -184,7 +184,7 @@ function HeatmapPanel({ scanId, centerLat, centerLng }) {
         if (scanId) {
             fetchData()
         }
-    }, [scanId])
+    }, [scanId, refreshKey])
 
     // Get current layer configuration
     const currentLayer = layers.find(l => l.id === activeLayer)

@@ -33,6 +33,19 @@ def _as_float(value):
         return None
 
 
+def _extract_image_fuel_fields(meta_data):
+    if not isinstance(meta_data, dict):
+        return {}
+    fuel = meta_data.get("fuel_estimation")
+    if not isinstance(fuel, dict):
+        return {}
+    return {
+        "one_hour_fuel": _as_float(fuel.get("one_hour_fuel")),
+        "ten_hour_fuel": _as_float(fuel.get("ten_hour_fuel")),
+        "hundred_hour_fuel": _as_float(fuel.get("hundred_hour_fuel")),
+    }
+
+
 @router.post("", response_model=ScanCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_scan(
     scan_data: ScanCreate,
@@ -246,6 +259,14 @@ async def get_heatmap_data(scan_id: int, db: Session = Depends(get_db)):
 
     # Add waypoint sample data (from real robot captures)
     if waypoint_data and not env_data:
+        waypoint_image_ids = [wp.rgb_image_id for wp in waypoint_data if wp.rgb_image_id]
+        image_fuel_by_id = {}
+        if waypoint_image_ids:
+            image_fuel_by_id = {
+                image.id: _extract_image_fuel_fields(image.meta_data)
+                for image in db.query(ScanImage).filter(ScanImage.id.in_(waypoint_image_ids)).all()
+            }
+
         # Use scan's lat/lng as base, spread waypoints in a grid for visualization
         base_lat = float(scan.latitude) if scan.latitude else 0
         base_lng = float(scan.longitude) if scan.longitude else 0
@@ -260,10 +281,17 @@ async def get_heatmap_data(scan_id: int, db: Session = Depends(get_db)):
             col = i % cols
             lat = base_lat - half_span + (row / max(1, cols - 1)) * 2 * half_span if cols > 1 else base_lat
             lng = base_lng - half_span + (col / max(1, cols - 1)) * 2 * half_span if cols > 1 else base_lng
+            fuel_fields = image_fuel_by_id.get(wp.rgb_image_id, {})
+            one_hour_fuel = fuel_fields.get("one_hour_fuel")
+            ten_hour_fuel = fuel_fields.get("ten_hour_fuel")
+            hundred_hour_fuel = fuel_fields.get("hundred_hour_fuel")
 
             fire_risk = FireRiskService.calculate_fire_risk(
                 plant_temperature=float(wp.thermal_mean) if wp.thermal_mean else None,
                 air_humidity=float(wp.air_humidity) if wp.air_humidity else None,
+                one_hour_fuel=one_hour_fuel,
+                ten_hour_fuel=ten_hour_fuel,
+                hundred_hour_fuel=hundred_hour_fuel,
             )
             heatmap_points.append(HeatmapPoint(
                 latitude=lat,
@@ -271,9 +299,9 @@ async def get_heatmap_data(scan_id: int, db: Session = Depends(get_db)):
                 air_temperature=float(wp.air_temperature) if wp.air_temperature else None,
                 air_humidity=float(wp.air_humidity) if wp.air_humidity else None,
                 plant_temperature=float(wp.thermal_mean) if wp.thermal_mean else None,
-                one_hour_fuel=None,
-                ten_hour_fuel=None,
-                hundred_hour_fuel=None,
+                one_hour_fuel=one_hour_fuel,
+                ten_hour_fuel=ten_hour_fuel,
+                hundred_hour_fuel=hundred_hour_fuel,
                 fire_risk=fire_risk
             ))
 

@@ -7,6 +7,12 @@ import './ScanResults.css'
 function ScanResults({ scanData, onBack }) {
   // Extract scan ID from scanData
   const scanId = scanData.id || scanData.scanId
+  const heatmapRefreshKey = [
+    scanData?.fuel_load ?? '',
+    scanData?.one_hour_fuel ?? '',
+    scanData?.ten_hour_fuel ?? '',
+    scanData?.hundred_hour_fuel ?? '',
+  ].join(':')
   const [pointData, setPointData] = useState(null)
   const [showPointData, setShowPointData] = useState(false)
   const [loadingPoints, setLoadingPoints] = useState(false)
@@ -23,10 +29,15 @@ function ScanResults({ scanData, onBack }) {
     setLoadingSamples(false)
   }, [scanId])
 
+  useEffect(() => {
+    setPointData(null)
+    setLoadingPoints(false)
+  }, [scanId, heatmapRefreshKey])
+
   // Load point-level data when toggled
   useEffect(() => {
     const loadPointData = async () => {
-      if (showPointData && !pointData && scanId) {
+      if (showPointData && scanId) {
         setLoadingPoints(true)
         try {
           const data = await apiClient.getHeatmapData(scanId)
@@ -39,7 +50,7 @@ function ScanResults({ scanData, onBack }) {
       }
     }
     loadPointData()
-  }, [showPointData, scanId, pointData])
+  }, [showPointData, scanId, heatmapRefreshKey])
 
   // Load waypoint samples when toggled
   useEffect(() => {
@@ -405,6 +416,7 @@ function ScanResults({ scanData, onBack }) {
               scanId={scanId}
               centerLat={parseFloat(scanData.latitude)}
               centerLng={parseFloat(scanData.longitude)}
+              refreshKey={heatmapRefreshKey}
             />
           ) : (
             <div className="thermal-map-container">
