@@ -16,7 +16,7 @@ DWAPlannerROS:
 
   # Goal tolerances (relaxed for outdoor GPS/odom drift)
   yaw_goal_tolerance: 0.8
-  xy_goal_tolerance: 0.5
+  xy_goal_tolerance: 0.2
   latch_xy_goal_tolerance: true
 
   # Forward simulation (longer horizon for outdoor planning)

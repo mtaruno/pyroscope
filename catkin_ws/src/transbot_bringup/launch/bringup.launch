@@ -56,6 +56,7 @@
     <!-- 扩展卡尔曼数据融合 -->
     <!-- Extended Kalman data fusion -->
     <node pkg="robot_localization" type="ekf_localization_node" name="ekf_localization">
+        <param name="publish_tf" value="true"/>
         <remap from="odometry/filtered" to="odom"/>
         <rosparam command="load" file="$(find transbot_bringup)/param/ekf/robot_localization.yaml"/>
     </node>

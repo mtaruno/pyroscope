@@ -46,7 +46,7 @@ class CoveragePlanner:
 
         # Goal tolerance for proximity-based capture (should match dwa_planner.yaml xy_goal_tolerance)
         self.xy_goal_tolerance = rospy.get_param('~xy_goal_tolerance', 0.5)
-        spacing_limited_tolerance = max(0.10, min(self.waypoint_spacing, self.row_spacing) * 0.4)
+        spacing_limited_tolerance = max(0.08, min(self.waypoint_spacing, self.row_spacing) * 0.2)
         self.proximity_capture_tolerance = rospy.get_param(
             '~proximity_capture_tolerance',
             min(self.xy_goal_tolerance, spacing_limited_tolerance)
@@ -118,28 +118,32 @@ class CoveragePlanner:
         y_min = start_y - half_h + margin
         y_max = start_y + half_h - margin
 
+        x_positions = self.axis_samples(x_min, x_max, self.waypoint_spacing)
+        y_positions = self.axis_samples(y_min, y_max, self.row_spacing)
+
         waypoints = []
-        row_idx = 0
-        y = y_min
-        while y <= y_max:
-            if row_idx % 2 == 0:
-                # Left to right
-                x = x_min
-                while x <= x_max:
-                    waypoints.append((x, y))
-                    x += self.waypoint_spacing
-            else:
-                # Right to left
-                x = x_max
-                while x >= x_min:
-                    waypoints.append((x, y))
-                    x -= self.waypoint_spacing
-            y += self.row_spacing
-            row_idx += 1
+        for row_idx, y in enumerate(y_positions):
+            xs = x_positions if row_idx % 2 == 0 else list(reversed(x_positions))
+            for x in xs:
+                waypoints.append((x, y))
 
         rospy.logwarn("Generated %d lawnmower waypoints over %.1fx%.1f area",
                       len(waypoints), self.area_width, self.area_height)
         return waypoints
+
+    def axis_samples(self, axis_min, axis_max, spacing):
+        """Return evenly spaced sample positions centered within [axis_min, axis_max]."""
+        span = max(0.0, axis_max - axis_min)
+        if span <= 1e-9:
+            return [(axis_min + axis_max) / 2.0]
+
+        count = int(math.floor(span / spacing)) + 1
+        count = max(1, count)
+
+        occupied_span = spacing * (count - 1)
+        start = axis_min + max(0.0, (span - occupied_span) / 2.0)
+
+        return [start + i * spacing for i in range(count)]
 
     def validate_waypoint_costmap(self, x, y):
         """Check if waypoint is in free space on the live costmap.
