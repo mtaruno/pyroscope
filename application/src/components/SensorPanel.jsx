@@ -3,16 +3,27 @@ import apiClient from '../services/api'
 import './SensorPanel.css'
 
 function SensorPanel({ expanded = false }) {
+  const [isExpanded, setIsExpanded] = useState(Boolean(expanded))
   const [sensorData, setSensorData] = useState({
     temperature: null,
     humidity: null,
     thermal_mean: null,
+    thermal_image_min: null,
+    thermal_image_max: null,
+    thermal_image_avg: null,
     thermal_image_url: null,
     rgb_image_url: null,
     timestamp: null
   })
   const [error, setError] = useState(null)
   const [available, setAvailable] = useState(false)
+
+  useEffect(() => {
+    // Auto-expand when scan starts, but allow manual collapse/expand otherwise.
+    if (expanded) {
+      setIsExpanded(true)
+    }
+  }, [expanded])
 
   useEffect(() => {
     // Poll sensor data every 1 second
@@ -51,12 +62,23 @@ function SensorPanel({ expanded = false }) {
     <div className="sensor-panel">
       <div className="sensor-panel-header">
         <h3 className="sensor-panel-title">Live Sensors</h3>
-        <span className={`sensor-status ${available ? 'ok' : 'bad'}`}>
-          {available ? 'sensors available' : 'sensors unavailable'}
-        </span>
+        <div className="sensor-panel-header-right">
+          <span className={`sensor-status ${available ? 'ok' : 'bad'}`}>
+            {available ? 'sensors available' : 'sensors unavailable'}
+          </span>
+          <button
+            type="button"
+            className="sensor-toggle-btn"
+            onClick={() => setIsExpanded(prev => !prev)}
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? 'Collapse live sensors' : 'Expand live sensors'}
+          >
+            {isExpanded ? 'Collapse' : 'Expand'}
+          </button>
+        </div>
       </div>
 
-      {expanded && (
+      {isExpanded && (
         <>
           {error && <div className="sensor-error">Sensor data unavailable</div>}
 
@@ -79,6 +101,14 @@ function SensorPanel({ expanded = false }) {
               <span className="sensor-label">Thermal Mean:</span>
               <span className="sensor-value">
                 {sensorData.thermal_mean !== null ? `${sensorData.thermal_mean} °C` : '---'}
+              </span>
+            </div>
+            <div className="sensor-item">
+              <span className="sensor-label">Thermal Img Min/Max/Avg:</span>
+              <span className="sensor-value">
+                {(sensorData.thermal_image_min !== null && sensorData.thermal_image_max !== null && sensorData.thermal_image_avg !== null)
+                  ? `${sensorData.thermal_image_min.toFixed(1)} / ${sensorData.thermal_image_max.toFixed(1)} / ${sensorData.thermal_image_avg.toFixed(1)}`
+                  : '---'}
               </span>
             </div>
           </div>

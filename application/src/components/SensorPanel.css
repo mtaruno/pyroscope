@@ -22,6 +22,12 @@
   border-bottom: 1px solid rgba(148, 163, 184, 0.1);
 }
 
+.sensor-panel-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
 .sensor-status {
   font-size: 0.8rem;
   font-weight: 600;
@@ -34,6 +40,20 @@
 
 .sensor-status.bad {
   color: #f87171;
+}
+
+.sensor-toggle-btn {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.6);
+  color: #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.sensor-toggle-btn:hover {
+  background: rgba(30, 41, 59, 0.9);
 }
 
 .sensor-error {

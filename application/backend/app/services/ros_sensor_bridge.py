@@ -34,6 +34,9 @@ _ros_cache: Dict[str, Any] = {
     "humidity": None,
     "thermal_mean": None,
     "thermal_image_bytes": None,   # in-memory JPEG bytes
+    "thermal_image_min": None,
+    "thermal_image_max": None,
+    "thermal_image_avg": None,
     "rgb_image_bytes": None,       # in-memory JPEG bytes
     "thermal_image_path": None,    # kept for waypoint capture compatibility
     "rgb_image_path": None,        # kept for waypoint capture compatibility
@@ -168,6 +171,9 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
                         buf = io.BytesIO()
                         pil_img.save(buf, "JPEG", quality=85)
                         return buf.getvalue()
+                    # Keep original RGB colors: cv2 expects BGR when encoding JPEG.
+                    if len(cv_img.shape) == 3 and msg.encoding in ("rgb8", "rgb16"):
+                        cv_img = cv_img[:, :, ::-1]
                     _, buf = _cv2.imencode(".jpg", cv_img, [_cv2.IMWRITE_JPEG_QUALITY, 85])
                     return buf.tobytes()
             elif _use_pil:
@@ -199,56 +205,37 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
 
     def _apply_thermal_colormap(pil_gray, colormap_name="inferno"):
         """Apply a colormap to a grayscale PIL image, return RGB PIL image."""
-        try:
-            from matplotlib import colormaps
-            cmap = colormaps[colormap_name]
-        except (ImportError, KeyError):
-            # Fallback: manual inferno-like gradient (cold=blue, hot=yellow/white)
-            return pil_gray.convert("RGB")
-        gray_raw = np.array(pil_gray, dtype=np.float32)
-
-        # Robust normalization reduces sudden color flips when scene content changes.
-        low_pct = float(getattr(settings, "THERMAL_NORM_LOW_PCT", 2.0))
-        high_pct = float(getattr(settings, "THERMAL_NORM_HIGH_PCT", 98.0))
-        low_val = np.percentile(gray_raw, low_pct)
-        high_val = np.percentile(gray_raw, high_pct)
-        if high_val <= low_val:
-            low_val = float(np.min(gray_raw))
-            high_val = float(np.max(gray_raw))
-        if high_val <= low_val:
-            normalized = np.zeros_like(gray_raw, dtype=np.float32)
-        else:
-            normalized = np.clip((gray_raw - low_val) / (high_val - low_val), 0.0, 1.0)
-
-        # Sensor polarity: many thermal streams are inverted (hotter -> lower raw value).
-        if bool(getattr(settings, "THERMAL_INVERT", True)):
-            normalized = 1.0 - normalized
-
-        # Gamma > 1 suppresses background noise while keeping hot targets prominent.
-        gamma = float(getattr(settings, "THERMAL_GAMMA", 1.8))
-        if gamma > 0:
-            normalized = np.power(normalized, gamma)
-
-        colored = (cmap(normalized)[:, :, :3] * 255).astype(np.uint8)
-        return PILImage.fromarray(colored)
+        # Disabled for debugging: keep topic image content raw.
+        return pil_gray.convert("RGB")
 
     _rgb_logged = [False]
     _thermal_logged = [False]
 
     def cb_thermal_image(msg):
-        # Keep publisher-provided pseudo-color when stream is already RGB/BGR.
-        mono_encodings = {"mono8", "mono16", "8UC1", "16UC1"}
-        thermal_colormap = settings.THERMAL_COLORMAP if msg.encoding in mono_encodings else None
-        jpeg_bytes = _ros_image_to_jpeg(msg, encoding="bgr8", colormap=thermal_colormap)
+        # Keep topic content raw (no extra backend thermal colormap).
+        jpeg_bytes = _ros_image_to_jpeg(msg, encoding="passthrough", colormap=None)
         if jpeg_bytes:
+            thermal_min = thermal_max = thermal_avg = None
+            try:
+                if np is not None:
+                    raw_arr = np.frombuffer(msg.data, dtype=np.uint8)
+                    if raw_arr.size > 0:
+                        thermal_min = float(np.min(raw_arr))
+                        thermal_max = float(np.max(raw_arr))
+                        thermal_avg = float(np.mean(raw_arr))
+            except Exception:
+                pass
             with _ros_cache["lock"]:
                 _ros_cache["thermal_image_bytes"] = jpeg_bytes
+                _ros_cache["thermal_image_min"] = thermal_min
+                _ros_cache["thermal_image_max"] = thermal_max
+                _ros_cache["thermal_image_avg"] = thermal_avg
             if not _thermal_logged[0]:
                 logger.warning("Thermal image streaming: %d bytes", len(jpeg_bytes))
                 _thermal_logged[0] = True
 
     def cb_rgb_image(msg):
-        jpeg_bytes = _ros_image_to_jpeg(msg, encoding="bgr8")
+        jpeg_bytes = _ros_image_to_jpeg(msg, encoding="passthrough")
         if jpeg_bytes:
             with _ros_cache["lock"]:
                 _ros_cache["rgb_image_bytes"] = jpeg_bytes
@@ -385,6 +372,9 @@ def get_latest_from_ros() -> Dict[str, Any]:
             "humidity": _ros_cache["humidity"],
             "thermal_mean": _ros_cache["thermal_mean"],
             "thermal_image_path": _ros_cache["thermal_image_path"],
+            "thermal_image_min": _ros_cache["thermal_image_min"],
+            "thermal_image_max": _ros_cache["thermal_image_max"],
+            "thermal_image_avg": _ros_cache["thermal_image_avg"],
             "rgb_image_path": _ros_cache["rgb_image_path"],
             "voltage": _ros_cache["voltage"],
             "battery_percent": _ros_cache["battery_percent"],

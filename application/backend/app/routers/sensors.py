@@ -28,6 +28,9 @@ class SensorData(BaseModel):
     temperature: Optional[float] = None
     humidity: Optional[float] = None
     thermal_mean: Optional[float] = None
+    thermal_image_min: Optional[float] = None
+    thermal_image_max: Optional[float] = None
+    thermal_image_avg: Optional[float] = None
     thermal_image_url: Optional[str] = None
     rgb_image_url: Optional[str] = None
     timestamp: Optional[float] = None
@@ -105,6 +108,9 @@ async def get_live_snapshot():
         temperature=data.get("temperature"),
         humidity=data.get("humidity"),
         thermal_mean=data.get("thermal_mean"),
+        thermal_image_min=data.get("thermal_image_min"),
+        thermal_image_max=data.get("thermal_image_max"),
+        thermal_image_avg=data.get("thermal_image_avg"),
         thermal_image_url=thermal_image_url,
         rgb_image_url=rgb_image_url,
     )
