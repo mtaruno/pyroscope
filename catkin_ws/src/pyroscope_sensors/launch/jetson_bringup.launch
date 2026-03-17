@@ -11,7 +11,7 @@
 
   <!-- Static TF: laser is mounted 15cm above base_link -->
   <node pkg="tf" type="static_transform_publisher" name="base_to_laser_tf"
-        args="0 0 0.15 3.1415926 0 0 base_link laser 100"/>
+        args="0 0 0.15 0 0 0 base_link laser 100"/>
 
   <!-- Pyroscope sensors: SHT40 + thermal + RealSense -->
   <include file="$(find pyroscope_sensors)/launch/sensors.launch"/>
