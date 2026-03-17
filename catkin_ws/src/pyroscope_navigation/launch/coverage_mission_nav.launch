@@ -20,25 +20,20 @@
     <node if="$(arg publish_laser_tf)" pkg="tf" type="static_transform_publisher" name="base_to_laser_tf_nav"
           args="$(arg laser_x) $(arg laser_y) $(arg laser_z) $(arg laser_roll) $(arg laser_pitch) $(arg laser_yaw) base_link laser 100"/>
 
-    <!-- GMapping SLAM: builds /map on the fly, publishes map→odom TF -->
-    <node pkg="gmapping" type="slam_gmapping" name="slam_gmapping" output="screen">
-        <rosparam file="$(find pyroscope_navigation)/config/gmapping.yaml" command="load"/>
-        <remap from="scan" to="/scan"/>
-    </node>
-
-    <!-- move_base with SLAM global costmap (map frame) and DWA local planner -->
+    <!-- move_base with rolling odom-frame global+local costmaps.
+         This avoids the unstable map->odom dependency from live SLAM during the demo. -->
     <node pkg="move_base" type="move_base" name="move_base" output="screen">
         <param name="base_local_planner" value="dwa_local_planner/DWAPlannerROS"/>
         <param name="base_global_planner" value="navfn/NavfnROS"/>
 
-        <!-- Global planner: allow planning through unmapped areas (map starts empty at mission start) -->
+        <!-- Global planner: allow planning through unknown cells in the rolling odom costmap -->
         <param name="NavfnROS/allow_unknown" value="true"/>
         <param name="NavfnROS/default_tolerance" value="0.3"/>
 
-        <!-- Load costmap configs — global uses SLAM map frame, local stays in odom -->
+        <!-- Load costmap configs — both costmaps operate in odom for this mission -->
         <rosparam file="$(find pyroscope_navigation)/config/costmap_common.yaml" command="load" ns="global_costmap"/>
         <rosparam file="$(find pyroscope_navigation)/config/costmap_common.yaml" command="load" ns="local_costmap"/>
-        <rosparam file="$(find pyroscope_navigation)/config/global_costmap_slam.yaml" command="load"/>
+        <rosparam file="$(find pyroscope_navigation)/config/global_costmap.yaml" command="load"/>
         <rosparam file="$(find pyroscope_navigation)/config/local_costmap.yaml" command="load"/>
         <rosparam file="$(find pyroscope_navigation)/config/dwa_planner.yaml" command="load"/>
 
@@ -67,6 +62,7 @@
         <param name="waypoint_spacing" value="$(arg waypoint_spacing)"/>
         <param name="origin_x" value="$(arg origin_x)"/>
         <param name="origin_y" value="$(arg origin_y)"/>
+        <param name="preferred_goal_frame" value="odom"/>
         <param name="dwell_time" value="$(arg dwell_time)"/>
         <param name="waypoint_timeout" value="$(arg waypoint_timeout)"/>
         <param name="waypoint_cost_threshold" value="50"/>

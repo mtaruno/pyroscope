@@ -35,6 +35,7 @@ class CoveragePlanner:
         self.waypoint_spacing = rospy.get_param('~waypoint_spacing', 1.0)
         self.origin_x = rospy.get_param('~origin_x', 0.0)
         self.origin_y = rospy.get_param('~origin_y', 0.0)
+        self.preferred_goal_frame = rospy.get_param('~preferred_goal_frame', 'map')
 
         # Timing parameters
         self.dwell_time = rospy.get_param('~dwell_time', 3.0)
@@ -219,8 +220,11 @@ class CoveragePlanner:
             return None
 
     def get_robot_pose(self):
-        # Prefer map frame (SLAM-corrected); fall back to odom if map not yet available
-        for frame in ('map', 'odom'):
+        frames = [self.preferred_goal_frame]
+        for fallback in ('map', 'odom'):
+            if fallback not in frames:
+                frames.append(fallback)
+        for frame in frames:
             pose = self.get_robot_pose_in_frame(frame)
             if pose is not None:
                 return pose
@@ -723,14 +727,18 @@ class CoveragePlanner:
         if not self.wait_for_fresh_pose(30.0):
             rospy.logwarn("TF not available after 30s -- using origin params")
 
-        # Record mission start position
-        pose = self.get_robot_pose_in_frame('map')
-        if pose is not None:
-            self.goal_frame = 'map'
-        else:
-            pose = self.get_robot_pose_in_frame('odom')
+        # Record mission start position in the preferred frame first, then fall back.
+        frames = [self.preferred_goal_frame]
+        for fallback in ('map', 'odom'):
+            if fallback not in frames:
+                frames.append(fallback)
+
+        pose = None
+        for frame in frames:
+            pose = self.get_robot_pose_in_frame(frame)
             if pose is not None:
-                self.goal_frame = 'odom'
+                self.goal_frame = frame
+                break
 
         if pose is not None:
             self.mission_start_x = pose[0]
