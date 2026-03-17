@@ -20,6 +20,7 @@ from app.models.waypoint_sample import ScanWaypointSample
 from app.models.image import ScanImage, ImageType
 from app.models.scan import ScanRecord
 from app.config import settings
+from app.services.scan_aggregate_service import ScanAggregateService
 from app.services.ros_sensor_bridge import (
     is_ros_configured,
     start_ros_bridge,
@@ -126,6 +127,15 @@ def _count_saved_waypoints(scan_id: int) -> int:
 
 
 def _mark_capture_completed(scan_id: int) -> None:
+    db = SessionLocal()
+    try:
+        ScanAggregateService.refresh_scan_aggregates(db, scan_id)
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to refresh scan aggregates for scan %d during completion", scan_id)
+    finally:
+        db.close()
+
     saved_count = _count_saved_waypoints(scan_id)
     with _capture_state_lock:
         _capture_state["captured_points"] = max(
@@ -274,6 +284,16 @@ def _capture_loop_impl(scan_id: int):
             db.flush()
             sample_id = sample.id
             db.commit()
+            try:
+                ScanAggregateService.refresh_scan_aggregates(db, scan_id)
+            except Exception as agg_error:
+                db.rollback()
+                logger.error(
+                    "Failed to refresh scan aggregates after waypoint %d: %s",
+                    sequence_index,
+                    agg_error,
+                    exc_info=True,
+                )
             with _capture_state_lock:
                 _capture_state["captured_points"] = sequence_index + 1
                 current_count = _capture_state["captured_points"]
