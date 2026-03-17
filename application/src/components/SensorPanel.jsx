@@ -109,7 +109,7 @@ function SensorPanel({ expanded = false }) {
                 <img
                   src={`${apiClient.getBaseUrl()}${sensorData.thermal_image_url}${sensorData.thermal_image_url.includes('?') ? '&' : '?'}t=${Date.now()}`}
                   alt="Thermal camera"
-                  className="sensor-image"
+                  className="sensor-image sensor-image-thermal-transformed"
                   key={sensorData.timestamp}
                 />
               </div>

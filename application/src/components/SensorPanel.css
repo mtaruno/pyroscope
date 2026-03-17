@@ -123,6 +123,12 @@
   background: #000;
 }
 
+.sensor-image-thermal-transformed {
+  /* Apply display-layer transform only: flip first, then rotate clockwise 90deg */
+  transform: rotate(90deg) scaleX(-1);
+  transform-origin: center center;
+}
+
 .sensor-timestamp {
   font-size: 0.75rem;
   color: #64748b;

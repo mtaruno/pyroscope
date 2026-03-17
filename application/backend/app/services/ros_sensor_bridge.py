@@ -162,6 +162,9 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         colormap=None,
         rotate_90_clockwise=False,
         flip_horizontal=False,
+        extra_flip_horizontal=False,
+        append_flip_horizontal=False,
+        append_rotate_90_clockwise=False,
     ):
         """Convert sensor_msgs/Image to JPEG bytes in memory.
         colormap: if set, apply a Matplotlib colormap to grayscale data (e.g. 'inferno').
@@ -178,6 +181,12 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
                             pil_img = pil_img.transpose(PILImage.Transpose.ROTATE_270)
                         if flip_horizontal:
                             pil_img = pil_img.transpose(PILImage.Transpose.FLIP_LEFT_RIGHT)
+                        if extra_flip_horizontal:
+                            pil_img = pil_img.transpose(PILImage.Transpose.FLIP_LEFT_RIGHT)
+                        if append_flip_horizontal:
+                            pil_img = pil_img.transpose(PILImage.Transpose.FLIP_LEFT_RIGHT)
+                        if append_rotate_90_clockwise:
+                            pil_img = pil_img.transpose(PILImage.Transpose.ROTATE_270)
                         buf = io.BytesIO()
                         pil_img.save(buf, "JPEG", quality=85)
                         return buf.getvalue()
@@ -188,6 +197,12 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
                         cv_img = _cv2.rotate(cv_img, _cv2.ROTATE_90_CLOCKWISE)
                     if flip_horizontal:
                         cv_img = _cv2.flip(cv_img, 1)
+                    if extra_flip_horizontal:
+                        cv_img = _cv2.flip(cv_img, 1)
+                    if append_flip_horizontal:
+                        cv_img = _cv2.flip(cv_img, 1)
+                    if append_rotate_90_clockwise:
+                        cv_img = _cv2.rotate(cv_img, _cv2.ROTATE_90_CLOCKWISE)
                     _, buf = _cv2.imencode(".jpg", cv_img, [_cv2.IMWRITE_JPEG_QUALITY, 85])
                     return buf.tobytes()
             elif _use_pil:
@@ -214,6 +229,12 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
                     pil_img = pil_img.transpose(PILImage.Transpose.ROTATE_270)
                 if flip_horizontal:
                     pil_img = pil_img.transpose(PILImage.Transpose.FLIP_LEFT_RIGHT)
+                if extra_flip_horizontal:
+                    pil_img = pil_img.transpose(PILImage.Transpose.FLIP_LEFT_RIGHT)
+                if append_flip_horizontal:
+                    pil_img = pil_img.transpose(PILImage.Transpose.FLIP_LEFT_RIGHT)
+                if append_rotate_90_clockwise:
+                    pil_img = pil_img.transpose(PILImage.Transpose.ROTATE_270)
                 buf = io.BytesIO()
                 pil_img.save(buf, "JPEG", quality=85)
                 return buf.getvalue()
@@ -281,8 +302,6 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
             msg,
             encoding="passthrough",
             colormap="temperature",
-            rotate_90_clockwise=True,
-            flip_horizontal=True,
         )
         if jpeg_bytes:
             thermal_min = thermal_max = thermal_avg = None
