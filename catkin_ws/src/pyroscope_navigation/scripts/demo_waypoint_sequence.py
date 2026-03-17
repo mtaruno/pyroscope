@@ -19,6 +19,7 @@ class DemoWaypointSequence:
         self.goal_timeout = rospy.get_param('~goal_timeout', 25.0)
         self.skip_on_stall = rospy.get_param('~skip_on_stall', True)
         self.settle_time = rospy.get_param('~settle_time', 0.5)
+        self.capture_on_skip = rospy.get_param('~capture_on_skip', True)
 
         self.waypoints = [
             (rospy.get_param('~x1', 1.0), rospy.get_param('~y1', 0.0)),
@@ -135,9 +136,23 @@ class DemoWaypointSequence:
             elif result == 'stalled':
                 rospy.logwarn("Waypoint %d stalled, skipping", index)
                 self.publish_stop()
+                if self.capture_on_skip:
+                    self.publish_status(
+                        "Waypoint {}/{} stalled; capturing at current stop".format(
+                            index, len(self.waypoints)
+                        )
+                    )
+                    self.publish_capture_ready_window()
             elif result == 'timeout':
                 rospy.logwarn("Waypoint %d timed out after %.1f s, skipping", index, self.goal_timeout)
                 self.publish_stop()
+                if self.capture_on_skip:
+                    self.publish_status(
+                        "Waypoint {}/{} timed out; capturing at current stop".format(
+                            index, len(self.waypoints)
+                        )
+                    )
+                    self.publish_capture_ready_window()
             else:
                 return
 
