@@ -156,7 +156,13 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
         with _ros_cache["lock"]:
             _ros_cache["thermal_mean"] = msg.data
 
-    def _ros_image_to_jpeg(msg, encoding="passthrough", colormap=None, rotate_90_clockwise=False):
+    def _ros_image_to_jpeg(
+        msg,
+        encoding="passthrough",
+        colormap=None,
+        rotate_90_clockwise=False,
+        flip_horizontal=False,
+    ):
         """Convert sensor_msgs/Image to JPEG bytes in memory.
         colormap: if set, apply a Matplotlib colormap to grayscale data (e.g. 'inferno').
         """
@@ -170,6 +176,8 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
                         pil_img = _apply_thermal_colormap(pil_gray, colormap)
                         if rotate_90_clockwise:
                             pil_img = pil_img.transpose(PILImage.Transpose.ROTATE_270)
+                        if flip_horizontal:
+                            pil_img = pil_img.transpose(PILImage.Transpose.FLIP_LEFT_RIGHT)
                         buf = io.BytesIO()
                         pil_img.save(buf, "JPEG", quality=85)
                         return buf.getvalue()
@@ -178,6 +186,8 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
                         cv_img = cv_img[:, :, ::-1]
                     if rotate_90_clockwise:
                         cv_img = _cv2.rotate(cv_img, _cv2.ROTATE_90_CLOCKWISE)
+                    if flip_horizontal:
+                        cv_img = _cv2.flip(cv_img, 1)
                     _, buf = _cv2.imencode(".jpg", cv_img, [_cv2.IMWRITE_JPEG_QUALITY, 85])
                     return buf.tobytes()
             elif _use_pil:
@@ -202,6 +212,8 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
                     pil_img = PILImage.fromarray(arr)
                 if rotate_90_clockwise:
                     pil_img = pil_img.transpose(PILImage.Transpose.ROTATE_270)
+                if flip_horizontal:
+                    pil_img = pil_img.transpose(PILImage.Transpose.FLIP_LEFT_RIGHT)
                 buf = io.BytesIO()
                 pil_img.save(buf, "JPEG", quality=85)
                 return buf.getvalue()
@@ -216,11 +228,11 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
             return pil_gray.convert("RGB")
 
         # Piecewise thermal mapping in Celsius:
-        # <=22C: pure blue
-        # 22..33C: very gentle exponential move toward warm colors
+        # <=20C: pure blue
+        # 20..33C: very gentle exponential move toward warm colors
         # 33..37C: rapidly move to red
         # >=37C: pure red
-        t_blue = 22.0
+        t_blue = 20.0
         t_warm = 33.0
         t_red = 37.0
 
@@ -270,6 +282,7 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
             encoding="passthrough",
             colormap="temperature",
             rotate_90_clockwise=True,
+            flip_horizontal=True,
         )
         if jpeg_bytes:
             thermal_min = thermal_max = thermal_avg = None

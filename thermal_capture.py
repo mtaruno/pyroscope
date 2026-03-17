@@ -34,7 +34,7 @@ def colorize_thermal_celsius(frame_celsius):
         return frame_celsius
 
     arr = np.array(frame_celsius, dtype=np.float32)
-    t_blue = 22.0
+    t_blue = 20.0
     t_warm = 33.0
     t_red = 37.0
 
@@ -108,6 +108,7 @@ def capture_once(save_image_path=None, simulate=False):
             frame_blur = cv.GaussianBlur(frame.astype(np.float32), (3, 3), 0)
             thermal_color = colorize_thermal_celsius(frame_blur)
             thermal_color = cv.rotate(thermal_color, cv.ROTATE_90_CLOCKWISE)
+            thermal_color = cv.flip(thermal_color, 1)
             cv.imwrite(save_image_path, thermal_color)
             image_path = save_image_path
     finally:

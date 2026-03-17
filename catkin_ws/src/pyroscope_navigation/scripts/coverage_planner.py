@@ -11,6 +11,8 @@ import rospy
 import math
 import actionlib
 import tf
+import subprocess
+import signal
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from geometry_msgs.msg import Twist, Point
 from nav_msgs.msg import OccupancyGrid
@@ -63,6 +65,13 @@ class CoveragePlanner:
         self.waypoint_cost_threshold = int(rospy.get_param('~waypoint_cost_threshold', 50))
         self.scan_blocked_margin = rospy.get_param('~scan_blocked_margin', 2.0)
         self.scan_blocked_sector = rospy.get_param('~scan_blocked_sector', 0.20)
+        self.enable_start_sound = rospy.get_param('~enable_start_sound', True)
+        self.start_sound_file = rospy.get_param('~start_sound_file', '/usr/share/sounds/alsa/Front_Center.wav')
+        self.enable_waypoint_sound = rospy.get_param('~enable_waypoint_sound', True)
+        self.waypoint_sound_file = rospy.get_param('~waypoint_sound_file', '/usr/share/sounds/alsa/Front_Center.wav')
+        self.enable_stop_sound = rospy.get_param('~enable_stop_sound', True)
+        self.stop_sound_file = rospy.get_param('~stop_sound_file', '/usr/share/sounds/alsa/Front_Center.wav')
+        self._stop_sound_played = False
 
         # State
         self.waypoints = []
@@ -104,6 +113,65 @@ class CoveragePlanner:
                       self.dwell_time, self.waypoint_timeout,
                       self.max_waypoint_failures, self.proximity_capture_tolerance)
         rospy.loginfo("  Lawnmower grid with costmap validation")
+
+        rospy.on_shutdown(self.on_shutdown)
+        try:
+            signal.signal(signal.SIGTERM, self.on_sigterm)
+        except Exception:
+            pass
+
+    def _play_sound(self, enabled, sound_file, label):
+        """Play a short non-blocking sound using aplay/paplay."""
+        if not enabled:
+            return
+
+        candidates = []
+        if sound_file:
+            candidates.append(['aplay', '-q', sound_file])
+            candidates.append(['paplay', sound_file])
+
+        for cmd in candidates:
+            try:
+                subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE
+                )
+                rospy.loginfo("%s sound triggered: %s", label, " ".join(cmd))
+                return
+            except Exception:
+                continue
+
+        rospy.logwarn(
+            "%s sound failed (enabled=%s, file=%s). "
+            "Install/use aplay or paplay, or set proper sound file path.",
+            label, enabled, sound_file
+        )
+
+    def play_start_sound(self):
+        """Play a short non-blocking start sound on Jetson."""
+        self._play_sound(self.enable_start_sound, self.start_sound_file, "Start")
+
+    def play_waypoint_sound(self):
+        """Play a short non-blocking sound when reaching each waypoint."""
+        self._play_sound(self.enable_waypoint_sound, self.waypoint_sound_file, "Waypoint")
+
+    def play_stop_sound(self):
+        """Play stop sound once when mission is stopped/shutdown."""
+        if self._stop_sound_played:
+            return
+        self._stop_sound_played = True
+        self._play_sound(self.enable_stop_sound, self.stop_sound_file, "Stop")
+
+    def on_sigterm(self, _signum, _frame):
+        self.play_stop_sound()
+        try:
+            rospy.signal_shutdown("SIGTERM received")
+        except Exception:
+            pass
+
+    def on_shutdown(self):
+        self.play_stop_sound()
 
     def generate_lawnmower_waypoints(self, start_x, start_y):
         """Generate a boustrophedon (lawnmower) grid of waypoints in map frame.
@@ -777,6 +845,7 @@ class CoveragePlanner:
         self.publish_progress(done=0, total=total)
         rospy.logwarn("=== STARTING COVERAGE MISSION: %d waypoints, area=%.1fx%.1f ===",
                       total, self.area_width, self.area_height)
+        self.play_start_sound()
 
         waypoint_count = 0
         skipped = 0
@@ -822,6 +891,7 @@ class CoveragePlanner:
             if reached:
                 rospy.logwarn("<<< REACHED waypoint %d/%d at (%.2f, %.2f) -- dwelling %.1fs",
                               i + 1, total, x, y, self.dwell_time)
+                self.play_waypoint_sound()
                 self.publish_capture_ready_window()
                 waypoint_count += 1
                 rospy.logwarn("    Captured %d/%d so far (%d skipped)",
