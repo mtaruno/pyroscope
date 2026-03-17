@@ -27,6 +27,50 @@ try:
 except ImportError:
     HAS_SENXOR = False
 
+
+def colorize_thermal_celsius(frame_celsius):
+    """Piecewise thermal mapping in Celsius."""
+    if cv is None or np is None:
+        return frame_celsius
+
+    arr = np.array(frame_celsius, dtype=np.float32)
+    t_blue = 26.0
+    t_warm = 33.0
+    t_red = 37.0
+
+    r = np.zeros_like(arr, dtype=np.float32)
+    g = np.zeros_like(arr, dtype=np.float32)
+    b = np.zeros_like(arr, dtype=np.float32)
+
+    cold_mask = arr <= t_blue
+    b[cold_mask] = 255.0
+
+    gentle_mask = (arr > t_blue) & (arr < t_warm)
+    if np.any(gentle_mask):
+        u = (arr[gentle_mask] - t_blue) / (t_warm - t_blue)
+        u = np.clip(u, 0.0, 1.0)
+        u = np.power(u, 2.4)
+        r[gentle_mask] = 255.0 * u
+        g[gentle_mask] = 220.0 * u
+        b[gentle_mask] = 255.0 * (1.0 - u)
+
+    hot_mask = (arr >= t_warm) & (arr < t_red)
+    if np.any(hot_mask):
+        v = (arr[hot_mask] - t_warm) / (t_red - t_warm)
+        v = np.clip(v, 0.0, 1.0)
+        v = np.power(v, 0.35)
+        r[hot_mask] = 255.0
+        g[hot_mask] = 220.0 * (1.0 - v)
+        b[hot_mask] = 0.0
+
+    very_hot_mask = arr >= t_red
+    r[very_hot_mask] = 255.0
+    g[very_hot_mask] = 0.0
+    b[very_hot_mask] = 0.0
+
+    rgb = np.stack([r, g, b], axis=-1).astype(np.uint8)
+    return cv.cvtColor(rgb, cv.COLOR_RGB2BGR)
+
 def capture_once(save_image_path=None, simulate=False):
     """
     Capture one thermal frame, compute mean, optionally save image.
@@ -60,10 +104,10 @@ def capture_once(save_image_path=None, simulate=False):
 
         image_path = None
         if save_image_path and cv is not None:
-            # Debug mode: keep raw-like grayscale only (no thermal pseudo-color mapping).
+            # Use fixed Celsius mapping for saved thermal preview.
             frame_blur = cv.GaussianBlur(frame.astype(np.float32), (3, 3), 0)
-            frame_u8 = np.clip(frame_blur, 0, 255).astype(np.uint8)
-            cv.imwrite(save_image_path, frame_u8)
+            thermal_color = colorize_thermal_celsius(frame_blur)
+            cv.imwrite(save_image_path, thermal_color)
             image_path = save_image_path
     finally:
         mi48.stop()

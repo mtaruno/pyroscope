@@ -205,24 +205,87 @@ def _ros_subscriber_thread(thermal_image_save_dir: str, rgb_image_save_dir: str)
 
     def _apply_thermal_colormap(pil_gray, colormap_name="inferno"):
         """Apply a colormap to a grayscale PIL image, return RGB PIL image."""
-        # Disabled for debugging: keep topic image content raw.
-        return pil_gray.convert("RGB")
+        arr = np.array(pil_gray, dtype=np.float32)
+        if arr.ndim != 2:
+            return pil_gray.convert("RGB")
+
+        # Piecewise thermal mapping in Celsius:
+        # <=26C: pure blue
+        # 26..33C: very gentle exponential move toward warm colors
+        # 33..37C: rapidly move to red
+        # >=37C: pure red
+        t_blue = 26.0
+        t_warm = 33.0
+        t_red = 37.0
+
+        r = np.zeros_like(arr, dtype=np.float32)
+        g = np.zeros_like(arr, dtype=np.float32)
+        b = np.zeros_like(arr, dtype=np.float32)
+
+        cold_mask = arr <= t_blue
+        r[cold_mask] = 0.0
+        g[cold_mask] = 0.0
+        b[cold_mask] = 255.0
+
+        gentle_mask = (arr > t_blue) & (arr < t_warm)
+        if np.any(gentle_mask):
+            u = (arr[gentle_mask] - t_blue) / (t_warm - t_blue)
+            u = np.clip(u, 0.0, 1.0)
+            u = np.power(u, 2.4)
+            # Blue -> warm orange/yellow base
+            r[gentle_mask] = 255.0 * u
+            g[gentle_mask] = 220.0 * u
+            b[gentle_mask] = 255.0 * (1.0 - u)
+
+        hot_mask = (arr >= t_warm) & (arr < t_red)
+        if np.any(hot_mask):
+            v = (arr[hot_mask] - t_warm) / (t_red - t_warm)
+            v = np.clip(v, 0.0, 1.0)
+            v = np.power(v, 0.35)
+            r[hot_mask] = 255.0
+            g[hot_mask] = 220.0 * (1.0 - v)
+            b[hot_mask] = 0.0
+
+        very_hot_mask = arr >= t_red
+        r[very_hot_mask] = 255.0
+        g[very_hot_mask] = 0.0
+        b[very_hot_mask] = 0.0
+
+        rgb = np.stack([r, g, b], axis=-1).astype(np.uint8)
+        return PILImage.fromarray(rgb, mode="RGB")
 
     _rgb_logged = [False]
     _thermal_logged = [False]
 
     def cb_thermal_image(msg):
-        # Keep topic content raw (no extra backend thermal colormap).
-        jpeg_bytes = _ros_image_to_jpeg(msg, encoding="passthrough", colormap=None)
+        # Thermal is temperature values; render with fixed Celsius color mapping.
+        jpeg_bytes = _ros_image_to_jpeg(msg, encoding="passthrough", colormap="temperature")
         if jpeg_bytes:
             thermal_min = thermal_max = thermal_avg = None
             try:
                 if np is not None:
-                    raw_arr = np.frombuffer(msg.data, dtype=np.uint8)
-                    if raw_arr.size > 0:
-                        thermal_min = float(np.min(raw_arr))
-                        thermal_max = float(np.max(raw_arr))
-                        thermal_avg = float(np.mean(raw_arr))
+                    thermal_arr = None
+                    if _use_cv_bridge:
+                        thermal_arr = _bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
+                    if thermal_arr is None:
+                        dtype = np.uint8
+                        if msg.encoding in ("32FC1", "32FC"):
+                            dtype = np.float32
+                        elif msg.encoding in ("16UC1", "mono16", "16SC1", "16SC"):
+                            dtype = np.uint16
+                        raw_arr = np.frombuffer(msg.data, dtype=dtype)
+                        if raw_arr.size > 0 and msg.width and msg.height:
+                            thermal_arr = raw_arr.reshape((msg.height, msg.width))
+                    if thermal_arr is not None:
+                        thermal_np = np.array(thermal_arr, dtype=np.float32)
+                        if thermal_np.ndim == 3:
+                            thermal_np = thermal_np[:, :, 0]
+                        valid = np.isfinite(thermal_np)
+                        if np.any(valid):
+                            vals = thermal_np[valid]
+                            thermal_min = float(np.min(vals))
+                            thermal_max = float(np.max(vals))
+                            thermal_avg = float(np.mean(vals))
             except Exception:
                 pass
             with _ros_cache["lock"]:
