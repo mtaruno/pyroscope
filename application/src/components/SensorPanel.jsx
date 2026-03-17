@@ -8,9 +8,6 @@ function SensorPanel({ expanded = false }) {
     temperature: null,
     humidity: null,
     thermal_mean: null,
-    thermal_image_min: null,
-    thermal_image_max: null,
-    thermal_image_avg: null,
     thermal_image_url: null,
     rgb_image_url: null,
     timestamp: null
@@ -101,14 +98,6 @@ function SensorPanel({ expanded = false }) {
               <span className="sensor-label">Thermal Mean:</span>
               <span className="sensor-value">
                 {sensorData.thermal_mean !== null ? `${sensorData.thermal_mean} °C` : '---'}
-              </span>
-            </div>
-            <div className="sensor-item">
-              <span className="sensor-label">Thermal Img Min/Max/Avg:</span>
-              <span className="sensor-value">
-                {(sensorData.thermal_image_min !== null && sensorData.thermal_image_max !== null && sensorData.thermal_image_avg !== null)
-                  ? `${sensorData.thermal_image_min.toFixed(1)} / ${sensorData.thermal_image_max.toFixed(1)} / ${sensorData.thermal_image_avg.toFixed(1)}`
-                  : '---'}
               </span>
             </div>
           </div>
