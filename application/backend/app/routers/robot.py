@@ -15,6 +15,7 @@ from app.config import settings
 import subprocess
 import os
 import signal
+import threading
 from pydantic import BaseModel
 from typing import Optional
 
@@ -22,6 +23,55 @@ router = APIRouter(prefix="/robot", tags=["Robot Status"])
 
 # Store active mission process
 mission_process = None
+_battery_sim_lock = threading.Lock()
+_battery_sim_state = {
+    "day_key": None,                 # YYYY-MM-DD (local date)
+    "first_launch_at": None,         # datetime of first roslaunch in this day
+    "beep_triggered": False,         # once beep starts, battery forced to 1%
+}
+
+
+def _today_key() -> str:
+    return datetime.now().strftime("%Y-%m-%d")
+
+
+def _ensure_battery_state_day() -> None:
+    day_key = _today_key()
+    with _battery_sim_lock:
+        if _battery_sim_state["day_key"] != day_key:
+            _battery_sim_state["day_key"] = day_key
+            _battery_sim_state["first_launch_at"] = None
+            _battery_sim_state["beep_triggered"] = False
+
+
+def _mark_first_roslaunch_if_needed() -> None:
+    _ensure_battery_state_day()
+    with _battery_sim_lock:
+        if _battery_sim_state["first_launch_at"] is None:
+            _battery_sim_state["first_launch_at"] = datetime.now()
+
+
+def _mark_beep_triggered() -> None:
+    _ensure_battery_state_day()
+    with _battery_sim_lock:
+        _battery_sim_state["beep_triggered"] = True
+
+
+def _get_simulated_battery_percent() -> Optional[int]:
+    _ensure_battery_state_day()
+    with _battery_sim_lock:
+        if _battery_sim_state["beep_triggered"]:
+            return 1
+        first_launch_at = _battery_sim_state["first_launch_at"]
+    if first_launch_at is None:
+        return None
+    elapsed_minutes = int((datetime.now() - first_launch_at).total_seconds() // 60)
+    simulated = max(1, 100 - elapsed_minutes)
+    # Low-battery beep semantics: when entering very low zone, battery collapses to 1%.
+    if simulated <= 5:
+        _mark_beep_triggered()
+        return 1
+    return simulated
 
 
 def _ensure_ros_bridge_for_status() -> None:
@@ -216,6 +266,7 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
             f'waypoint_timeout:={config.waypoint_timeout}'
         )
         cmd = ['bash', '-c', ros_cmd]
+        _mark_first_roslaunch_if_needed()
 
         # Start the mission as a background process (may fail on non-ROS hosts; continue for capture)
         try:
@@ -383,6 +434,8 @@ async def get_robot_status(robot_id: str, db: Session = Depends(get_db)):
     _ensure_ros_bridge_for_status()
     ros_data = get_latest_from_ros()
     ros_battery = ros_data.get("battery_percent")
+    sim_battery = _get_simulated_battery_percent()
+    effective_battery = ros_battery if ros_battery is not None else sim_battery
 
     robot_status = (
         db.query(RobotStatus)
@@ -392,14 +445,14 @@ async def get_robot_status(robot_id: str, db: Session = Depends(get_db)):
     )
 
     if not robot_status:
-        if ros_battery is None:
+        if effective_battery is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Robot status not found"
             )
         return RobotStatusResponse(
             robot_id=robot_id,
-            battery_level=int(ros_battery),
+            battery_level=int(effective_battery),
             storage_used=None,
             storage_total=None,
             signal_strength="Good",
@@ -411,7 +464,7 @@ async def get_robot_status(robot_id: str, db: Session = Depends(get_db)):
 
     return RobotStatusResponse(
         robot_id=robot_status.robot_id,
-        battery_level=int(ros_battery) if ros_battery is not None else robot_status.battery_level,
+        battery_level=int(effective_battery) if effective_battery is not None else robot_status.battery_level,
         storage_used=float(robot_status.storage_used) if robot_status.storage_used else None,
         storage_total=float(robot_status.storage_total) if robot_status.storage_total else None,
         signal_strength=robot_status.signal_strength,

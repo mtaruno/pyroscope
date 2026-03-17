@@ -34,9 +34,9 @@ def colorize_thermal_celsius(frame_celsius):
         return frame_celsius
 
     arr = np.array(frame_celsius, dtype=np.float32)
-    t_blue = 16.0
-    t_warm = 30.0
-    t_red = 37.0
+    t_blue = 13.0
+    t_warm = 28.0
+    t_red = 35.0
 
     r = np.zeros_like(arr, dtype=np.float32)
     g = np.zeros_like(arr, dtype=np.float32)
