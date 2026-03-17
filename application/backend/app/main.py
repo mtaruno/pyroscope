@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routers import scans, environmental, images, robot, sensors
-from app.services.ros_sensor_bridge import is_ros_configured, start_ros_bridge
+from app.services.ros_sensor_bridge import is_ros_configured, start_ros_bridge, stop_ros_bridge
 from app.services.teleop_bridge import stop_teleop_bridge
 
 logger = logging.getLogger(__name__)
@@ -53,6 +53,7 @@ def startup_ros_bridge():
 
 @app.on_event("shutdown")
 def shutdown_background_ros_services():
+    stop_ros_bridge()
     stop_teleop_bridge()
 
 
