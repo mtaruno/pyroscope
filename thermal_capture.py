@@ -32,8 +32,8 @@ except ImportError:
 #   <= THERMAL_BLUE_CUTOFF_RAW -> fixed blue (background)
 #   >= THERMAL_RED_AT_RAW      -> red
 #   between cutoff..red_at     -> exponential rise
-THERMAL_BLUE_CUTOFF_RAW = 170.0
-THERMAL_RED_AT_RAW = 200.0
+THERMAL_BLUE_CUTOFF_RAW = 140.0
+THERMAL_RED_AT_RAW = 180.0
 THERMAL_EXPONENT = 1.6
 
 
