@@ -27,31 +27,32 @@ try:
 except ImportError:
     HAS_SENXOR = False
 
-# Thermal display tuning (absolute temperature mapping, in Celsius):
-#   <= THERMAL_BLUE_CUTOFF_C  -> fixed blue (stable cold background)
-#   >= THERMAL_RED_AT_C       -> red
-#   between cutoff..red_at    -> exponential rise to suppress low-temp noise
-THERMAL_BLUE_CUTOFF_C = 15.0
-THERMAL_RED_AT_C = 35.0
-THERMAL_EXPONENT = 2.6
+# Thermal display tuning (hypothesis 1):
+# assume input frame is 0..255-like and larger value means hotter.
+#   <= THERMAL_BLUE_CUTOFF_RAW -> fixed blue (background)
+#   >= THERMAL_RED_AT_RAW      -> red
+#   between cutoff..red_at     -> exponential rise
+THERMAL_BLUE_CUTOFF_RAW = 170.0
+THERMAL_RED_AT_RAW = 200.0
+THERMAL_EXPONENT = 1.6
 
 
-def colorize_thermal_celsius(frame_celsius):
-    """Map temperature frame (Celsius) to pseudo-color using fixed thresholds."""
+def colorize_thermal_raw(frame_raw):
+    """Map raw-like thermal frame to pseudo-color using fixed thresholds."""
     if cv is None or np is None:
-        return frame_celsius
+        return frame_raw
 
-    if THERMAL_RED_AT_C <= THERMAL_BLUE_CUTOFF_C:
-        raise ValueError("THERMAL_RED_AT_C must be greater than THERMAL_BLUE_CUTOFF_C")
+    if THERMAL_RED_AT_RAW <= THERMAL_BLUE_CUTOFF_RAW:
+        raise ValueError("THERMAL_RED_AT_RAW must be greater than THERMAL_BLUE_CUTOFF_RAW")
 
-    temp = np.array(frame_celsius, dtype=np.float32)
-    norm = np.zeros_like(temp, dtype=np.float32)
-    hot_mask = temp > THERMAL_BLUE_CUTOFF_C
+    raw = np.array(frame_raw, dtype=np.float32)
+    norm = np.zeros_like(raw, dtype=np.float32)
+    hot_mask = raw > THERMAL_BLUE_CUTOFF_RAW
     if np.any(hot_mask):
-        linear = (temp[hot_mask] - THERMAL_BLUE_CUTOFF_C) / (THERMAL_RED_AT_C - THERMAL_BLUE_CUTOFF_C)
+        linear = (raw[hot_mask] - THERMAL_BLUE_CUTOFF_RAW) / (THERMAL_RED_AT_RAW - THERMAL_BLUE_CUTOFF_RAW)
         linear = np.clip(linear, 0.0, 1.0)
         norm[hot_mask] = np.power(linear, THERMAL_EXPONENT)
-    # <= cutoff remains 0 (blue), >= red_at saturates to 1 (red)
+    # <= cutoff remains blue, >= red_at saturates to red
     norm = np.clip(norm, 0.0, 1.0)
     gray_uint8 = (norm * 255.0).astype(np.uint8)
     return cv.applyColorMap(gray_uint8, cv.COLORMAP_JET)
@@ -90,9 +91,9 @@ def capture_once(save_image_path=None, simulate=False):
 
         image_path = None
         if save_image_path and cv is not None:
-            # Keep mild denoise in temperature domain, but DO NOT use frame-by-frame remap().
+            # Keep mild denoise in raw domain, but DO NOT use frame-by-frame remap().
             frame_blur = cv.GaussianBlur(frame.astype(np.float32), (3, 3), 0)
-            thermal_color = colorize_thermal_celsius(frame_blur)
+            thermal_color = colorize_thermal_raw(frame_blur)
             cv.imwrite(save_image_path, thermal_color)
             image_path = save_image_path
     finally:
