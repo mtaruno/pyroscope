@@ -22,9 +22,10 @@ slam_gmapping:
   angularUpdate: 0.15
   temporalUpdate: 5.0
 
-  # TF tolerance for WiFi latency between Jetson and remote PC
-  transform_publish_period: 0.1
-  tf_delay: 1.0
+  # Publish map->odom close to real time; a large delay causes the local planner
+  # to fail transforming map-frame plans into the odom local frame.
+  transform_publish_period: 0.05
+  tf_delay: 0.05
 
   # Particle filter
   particles: 30

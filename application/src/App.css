@@ -340,12 +340,20 @@
   z-index: 1200;
 }
 
+.teleop-launcher.with-fuel-task {
+  bottom: 300px;
+}
+
 .teleop-toast {
   width: 340px;
 }
 
 .teleop-toast.collapsed {
   width: 230px;
+}
+
+.teleop-toast.with-fuel-task {
+  bottom: 300px;
 }
 
 .teleop-toast-body {

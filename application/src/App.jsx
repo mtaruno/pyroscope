@@ -245,13 +245,6 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    if (isScanning) {
-      setTeleopVisible(false)
-      setTeleopCollapsed(false)
-    }
-  }, [isScanning])
-
   // Poll latest waypoint capture while scanning
   useEffect(() => {
     if (!isScanning || !activeScanId) {
@@ -1043,23 +1036,25 @@ function App() {
           )}
         </aside>
       )}
-      {!isScanning && !teleopVisible && (
+      {!teleopVisible && (
         <button
-          className="teleop-launcher"
+          className={`teleop-launcher ${fuelTask.visible ? 'with-fuel-task' : ''}`}
           onClick={() => {
             setTeleopVisible(true)
             setTeleopCollapsed(false)
           }}
         >
-          Manual Control
+          {isScanning ? 'Manual Override' : 'Manual Control'}
         </button>
       )}
-      {!isScanning && teleopVisible && (
-        <aside className={`fuel-task-toast teleop-toast ${teleopCollapsed ? 'collapsed' : ''}`}>
+      {teleopVisible && (
+        <aside className={`fuel-task-toast teleop-toast ${teleopCollapsed ? 'collapsed' : ''} ${fuelTask.visible ? 'with-fuel-task' : ''}`}>
           <div className="fuel-task-header">
             <div>
-              <strong>Manual Control</strong>
-              <div className="fuel-task-status running">Keyboard + on-screen teleop</div>
+              <strong>{isScanning ? 'Manual Override' : 'Manual Control'}</strong>
+              <div className="fuel-task-status running">
+                {isScanning ? 'Available during scanning for recovery' : 'Keyboard + on-screen teleop'}
+              </div>
             </div>
             <div className="fuel-task-header-actions">
               <button
