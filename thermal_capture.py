@@ -22,37 +22,39 @@ except ImportError:
 
 # Optional: senxor MI48
 try:
-    from senxor.utils import data_to_frame, remap, cv_filter, connect_senxor
+    from senxor.utils import data_to_frame, connect_senxor
     HAS_SENXOR = True
 except ImportError:
     HAS_SENXOR = False
 
-# Thermal display tuning:
-# Smaller value means hotter for this sensor stream.
-# We enforce a fixed visual window to increase contrast in UI:
-#   <= 80  -> hot (red)
-#   >= 180 -> cold (deep blue)
-THERMAL_HOT_VALUE = 80
-THERMAL_COLD_VALUE = 180
+# Thermal display tuning (absolute temperature mapping, in Celsius):
+#   <= THERMAL_BLUE_CUTOFF_C  -> fixed blue (stable cold background)
+#   >= THERMAL_RED_AT_C       -> red
+#   between cutoff..red_at    -> exponential rise to suppress low-temp noise
+THERMAL_BLUE_CUTOFF_C = 15.0
+THERMAL_RED_AT_C = 35.0
+THERMAL_EXPONENT = 2.6
 
 
-def colorize_thermal_uint8(gray_uint8):
-    """Map thermal grayscale to pseudo-color with inverse temperature logic.
-
-    gray_uint8: uint8 image where smaller value means hotter.
-    Returns BGR color image:
-      <= THERMAL_HOT_VALUE  -> red
-      >= THERMAL_COLD_VALUE -> deep blue
-    """
+def colorize_thermal_celsius(frame_celsius):
+    """Map temperature frame (Celsius) to pseudo-color using fixed thresholds."""
     if cv is None or np is None:
-        return gray_uint8
+        return frame_celsius
 
-    clipped = np.clip(gray_uint8, THERMAL_HOT_VALUE, THERMAL_COLD_VALUE).astype(np.float32)
-    # Fixed mapping: 80 -> 0, 180 -> 255.
-    normalized = ((clipped - THERMAL_HOT_VALUE) * 255.0 / (THERMAL_COLD_VALUE - THERMAL_HOT_VALUE)).astype(np.uint8)
-    # Invert so lower value becomes hotter (red).
-    inverted = 255 - normalized
-    return cv.applyColorMap(inverted, cv.COLORMAP_JET)
+    if THERMAL_RED_AT_C <= THERMAL_BLUE_CUTOFF_C:
+        raise ValueError("THERMAL_RED_AT_C must be greater than THERMAL_BLUE_CUTOFF_C")
+
+    temp = np.array(frame_celsius, dtype=np.float32)
+    norm = np.zeros_like(temp, dtype=np.float32)
+    hot_mask = temp > THERMAL_BLUE_CUTOFF_C
+    if np.any(hot_mask):
+        linear = (temp[hot_mask] - THERMAL_BLUE_CUTOFF_C) / (THERMAL_RED_AT_C - THERMAL_BLUE_CUTOFF_C)
+        linear = np.clip(linear, 0.0, 1.0)
+        norm[hot_mask] = np.power(linear, THERMAL_EXPONENT)
+    # <= cutoff remains 0 (blue), >= red_at saturates to 1 (red)
+    norm = np.clip(norm, 0.0, 1.0)
+    gray_uint8 = (norm * 255.0).astype(np.uint8)
+    return cv.applyColorMap(gray_uint8, cv.COLORMAP_JET)
 
 
 def capture_once(save_image_path=None, simulate=False):
@@ -88,12 +90,9 @@ def capture_once(save_image_path=None, simulate=False):
 
         image_path = None
         if save_image_path and cv is not None:
-            par = {"blur_ks": 3, "d": 5, "sigmaColor": 27, "sigmaSpace": 27}
-            min_t, max_t = float(np.min(frame)), float(np.max(frame))
-            frame_clip = np.clip(frame, min_t, max_t)
-            filt_uint8 = cv_filter(remap(frame_clip), par, use_median=True, use_bilat=True, use_nlm=False)
-            # Apply fixed thermal palette window for stronger contrast in field operation.
-            thermal_color = colorize_thermal_uint8(filt_uint8)
+            # Keep mild denoise in temperature domain, but DO NOT use frame-by-frame remap().
+            frame_blur = cv.GaussianBlur(frame.astype(np.float32), (3, 3), 0)
+            thermal_color = colorize_thermal_celsius(frame_blur)
             cv.imwrite(save_image_path, thermal_color)
             image_path = save_image_path
     finally:
