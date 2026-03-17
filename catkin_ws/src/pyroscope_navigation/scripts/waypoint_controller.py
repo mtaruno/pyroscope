@@ -21,10 +21,14 @@ class WaypointController:
         # Controller parameters
         self.linear_gain = rospy.get_param('~linear_gain', 0.5)
         self.angular_gain = rospy.get_param('~angular_gain', 1.5)
-        self.max_linear_vel = rospy.get_param('~max_linear_vel', 0.3)  # m/s
-        self.max_angular_vel = rospy.get_param('~max_angular_vel', 0.8)  # rad/s
-        self.goal_tolerance = rospy.get_param('~goal_tolerance', 0.5)  # meters
+        self.max_linear_vel = rospy.get_param('~max_linear_vel', 0.12)  # m/s
+        self.max_angular_vel = rospy.get_param('~max_angular_vel', 0.35)  # rad/s
+        self.goal_tolerance = rospy.get_param('~goal_tolerance', 0.25)  # meters
         self.control_frequency = rospy.get_param('~control_frequency', 10.0)  # Hz
+        self.heading_threshold = rospy.get_param('~heading_threshold', 0.35)  # rad
+        self.turn_in_place_linear_vel = rospy.get_param('~turn_in_place_linear_vel', 0.0)
+        self.progress_epsilon = rospy.get_param('~progress_epsilon', 0.03)  # meters
+        self.stall_timeout = rospy.get_param('~stall_timeout', 4.0)  # seconds
 
         # State variables
         self.current_pose = None
@@ -50,6 +54,8 @@ class WaypointController:
         rospy.loginfo("Waypoint Controller initialized")
         rospy.loginfo("  Linear gain: {}, Angular gain: {}".format(self.linear_gain, self.angular_gain))
         rospy.loginfo("  Max velocities: {} m/s, {} rad/s".format(self.max_linear_vel, self.max_angular_vel))
+        rospy.loginfo("  Goal tolerance: %.2f m, heading threshold: %.2f rad",
+                      self.goal_tolerance, self.heading_threshold)
 
     def odom_callback(self, msg):
         """Update current pose from odometry"""
@@ -119,19 +125,18 @@ class WaypointController:
         cmd.angular.z = self.angular_gain * yaw_error
         cmd.angular.z = max(-self.max_angular_vel, min(self.max_angular_vel, cmd.angular.z))
 
-        # Linear velocity (move forward if roughly facing target)
-        if abs(yaw_error) < math.pi / 4:  # Within 45 degrees
+        # Linear velocity: only advance once mostly aligned with the goal.
+        if abs(yaw_error) < self.heading_threshold:
             cmd.linear.x = self.linear_gain * distance
             cmd.linear.x = max(0, min(self.max_linear_vel, cmd.linear.x))
         else:
-            # Turn in place if not facing target
-            cmd.linear.x = 0.1  # Small forward velocity to help with turning
+            cmd.linear.x = self.turn_in_place_linear_vel
 
         # Check for stalled progress
         if self.last_distance is not None:
-            if abs(self.last_distance - distance) < 0.05:  # Less than 5cm progress
+            if abs(self.last_distance - distance) < self.progress_epsilon:
                 time_since_progress = (rospy.Time.now() - self.last_progress_time).to_sec()
-                if time_since_progress > 5.0:  # Stalled for 5 seconds
+                if time_since_progress > self.stall_timeout:
                     rospy.logwarn("Progress stalled! Distance: {:.2f}m".format(distance))
                     self.stalled_pub.publish(Bool(data=True))
             else:

@@ -1,0 +1,60 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="linear_gain" default="0.45" />
+  <arg name="angular_gain" default="1.1" />
+  <arg name="max_linear_vel" default="0.12" />
+  <arg name="max_angular_vel" default="0.35" />
+  <arg name="goal_tolerance" default="0.25" />
+  <arg name="heading_threshold" default="0.35" />
+  <arg name="control_frequency" default="10.0" />
+  <arg name="stop_distance" default="0.30" />
+  <arg name="front_arc_degrees" default="30.0" />
+  <arg name="dwell_time" default="1.0" />
+  <arg name="goal_timeout" default="25.0" />
+
+  <arg name="x1" default="1.0" />
+  <arg name="y1" default="0.0" />
+  <arg name="x2" default="1.0" />
+  <arg name="y2" default="1.0" />
+  <arg name="x3" default="0.0" />
+  <arg name="y3" default="1.0" />
+  <arg name="x4" default="0.0" />
+  <arg name="y4" default="0.0" />
+
+  <node pkg="pyroscope_navigation" type="waypoint_controller.py" name="waypoint_controller" output="screen">
+    <param name="linear_gain" value="$(arg linear_gain)" />
+    <param name="angular_gain" value="$(arg angular_gain)" />
+    <param name="max_linear_vel" value="$(arg max_linear_vel)" />
+    <param name="max_angular_vel" value="$(arg max_angular_vel)" />
+    <param name="goal_tolerance" value="$(arg goal_tolerance)" />
+    <param name="heading_threshold" value="$(arg heading_threshold)" />
+    <param name="control_frequency" value="$(arg control_frequency)" />
+    <param name="turn_in_place_linear_vel" value="0.0" />
+    <param name="progress_epsilon" value="0.03" />
+    <param name="stall_timeout" value="4.0" />
+  </node>
+
+  <node pkg="pyroscope_navigation" type="lidar_obstacle_detector.py" name="lidar_obstacle_detector" output="screen">
+    <param name="stop_distance" value="$(arg stop_distance)" />
+    <param name="front_arc_degrees" value="$(arg front_arc_degrees)" />
+  </node>
+
+  <node pkg="pyroscope_navigation" type="safety_stop.py" name="safety_stop" output="screen">
+    <param name="override_duration" value="0.5" />
+  </node>
+
+  <node pkg="pyroscope_navigation" type="demo_waypoint_sequence.py" name="demo_waypoint_sequence" output="screen">
+    <param name="frame_id" value="odom" />
+    <param name="dwell_time" value="$(arg dwell_time)" />
+    <param name="goal_timeout" value="$(arg goal_timeout)" />
+    <param name="skip_on_stall" value="true" />
+    <param name="x1" value="$(arg x1)" />
+    <param name="y1" value="$(arg y1)" />
+    <param name="x2" value="$(arg x2)" />
+    <param name="y2" value="$(arg y2)" />
+    <param name="x3" value="$(arg x3)" />
+    <param name="y3" value="$(arg y3)" />
+    <param name="x4" value="$(arg x4)" />
+    <param name="y4" value="$(arg y4)" />
+  </node>
+</launch>

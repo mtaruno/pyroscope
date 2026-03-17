@@ -509,12 +509,14 @@ function App() {
   }
 
   const handleConfirmStartScan = async ({
+    missionMode = 'coverage_planner',
     areaSize, precision, totalPoints: configuredTotal,
     originX = 0, originY = 0, rowSpacing = 0.8, dwellTime = 2.0, waypointTimeout = 30.0
   }) => {
     setShowScanConfigModal(false)
     try {
       const missionConfig = {
+        mission_mode: missionMode,
         area_size_m: areaSize,
         sampling_precision_m: precision,
         area_width: areaSize,
@@ -539,10 +541,14 @@ function App() {
       setCapturedPoints(response?.captured_points || 0)
       setTotalPoints(response?.total_points || configuredTotal || 0)
       setScanProgress(response?.progress_percent || 0)
-      setScanPhase('Waiting for /coverage/capture_ready = true ...')
+      setScanPhase(
+        missionMode === 'demo_waypoints'
+          ? 'Waypoint demo started. Waiting for first capture-ready trigger ...'
+          : 'Waiting for /coverage/capture_ready = true ...'
+      )
       setRobotStatus(prev => ({ ...prev, operatingState: 'Scanning' }))
     } catch (error) {
-      console.error('Failed to start coverage mission:', error)
+      console.error('Failed to start mission:', error)
       alert(`Failed to start mission: ${error.message}`)
     }
   }
@@ -561,9 +567,9 @@ function App() {
   const handleStopScan = async () => {
     try {
       await apiClient.stopCoverageMission()
-      console.log('Coverage mission stopped on robot')
+      console.log('Mission stopped on robot')
     } catch (error) {
-      console.error('Failed to stop coverage mission:', error.message)
+      console.error('Failed to stop mission:', error.message)
     }
     setIsScanning(false)
     setIsPaused(false)

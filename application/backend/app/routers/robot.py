@@ -17,7 +17,7 @@ import os
 import signal
 import threading
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 
 router = APIRouter(prefix="/robot", tags=["Robot Status"])
 
@@ -134,6 +134,7 @@ async def send_teleop_command(cmd: TeleopCommand):
 
 
 class MissionConfig(BaseModel):
+    mission_mode: Literal["coverage_planner", "demo_waypoints"] = "coverage_planner"
     area_size_m: float = 50.0
     sampling_precision_m: float = 5.0
     area_width: Optional[float] = None
@@ -180,6 +181,34 @@ def _calc_total_waypoints(area_width: float, area_height: float,
     return total
 
 
+def _calc_demo_rectangle(area_width: float, area_height: float,
+                         origin_x: float, origin_y: float,
+                         wall_margin: float = 0.30) -> dict:
+    """Build a simple four-corner rectangle in odom frame for demo waypoint mode."""
+    half_w = area_width / 2.0
+    half_h = area_height / 2.0
+    x_min = origin_x - half_w + wall_margin
+    x_max = origin_x + half_w - wall_margin
+    y_min = origin_y - half_h + wall_margin
+    y_max = origin_y + half_h - wall_margin
+
+    if x_min > x_max:
+        x_min = x_max = origin_x
+    if y_min > y_max:
+        y_min = y_max = origin_y
+
+    return {
+        "x1": x_min,
+        "y1": y_min,
+        "x2": x_max,
+        "y2": y_min,
+        "x3": x_max,
+        "y3": y_max,
+        "x4": x_min,
+        "y4": y_max,
+    }
+
+
 @router.post("/mission/start")
 async def start_coverage_mission(config: MissionConfig = None, db: Session = Depends(get_db)):
     """Start the lawnmower coverage mission and waypoint capture loop."""
@@ -204,10 +233,13 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
         area_size_m = float(config.area_size_m)
         area_width = float(config.area_width) if config.area_width is not None else area_size_m
         area_height = float(config.area_height) if config.area_height is not None else area_size_m
-        total_points = _calc_total_waypoints(
-            area_width, area_height,
-            config.row_spacing, config.waypoint_spacing,
-        )
+        if config.mission_mode == "demo_waypoints":
+            total_points = 4
+        else:
+            total_points = _calc_total_waypoints(
+                area_width, area_height,
+                config.row_spacing, config.waypoint_spacing,
+            )
 
         # Create scan record (in progress) so we have scan_id for waypoint samples
         scan = ScanRecord(
@@ -252,19 +284,42 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
         except Exception:
             pass  # cleanup is best-effort
 
-        ros_cmd = (
-            f'source /opt/ros/melodic/setup.bash && '
-            f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
-            f'/opt/ros/melodic/bin/roslaunch pyroscope_navigation coverage_mission_nav.launch '
-            f'area_width:={area_width} '
-            f'area_height:={area_height} '
-            f'row_spacing:={config.row_spacing} '
-            f'waypoint_spacing:={config.waypoint_spacing} '
-            f'origin_x:={config.origin_x} '
-            f'origin_y:={config.origin_y} '
-            f'dwell_time:={config.dwell_time} '
-            f'waypoint_timeout:={config.waypoint_timeout}'
-        )
+        if config.mission_mode == "demo_waypoints":
+            demo_rectangle = _calc_demo_rectangle(
+                area_width,
+                area_height,
+                config.origin_x,
+                config.origin_y,
+            )
+            ros_cmd = (
+                f'source /opt/ros/melodic/setup.bash && '
+                f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
+                f'/opt/ros/melodic/bin/roslaunch pyroscope_navigation demo_waypoints.launch '
+                f'dwell_time:={config.dwell_time} '
+                f'goal_timeout:={config.waypoint_timeout} '
+                f'x1:={demo_rectangle["x1"]} '
+                f'y1:={demo_rectangle["y1"]} '
+                f'x2:={demo_rectangle["x2"]} '
+                f'y2:={demo_rectangle["y2"]} '
+                f'x3:={demo_rectangle["x3"]} '
+                f'y3:={demo_rectangle["y3"]} '
+                f'x4:={demo_rectangle["x4"]} '
+                f'y4:={demo_rectangle["y4"]}'
+            )
+        else:
+            ros_cmd = (
+                f'source /opt/ros/melodic/setup.bash && '
+                f'source ~/pyroscope/catkin_ws/devel/setup.bash && '
+                f'/opt/ros/melodic/bin/roslaunch pyroscope_navigation coverage_mission_nav.launch '
+                f'area_width:={area_width} '
+                f'area_height:={area_height} '
+                f'row_spacing:={config.row_spacing} '
+                f'waypoint_spacing:={config.waypoint_spacing} '
+                f'origin_x:={config.origin_x} '
+                f'origin_y:={config.origin_y} '
+                f'dwell_time:={config.dwell_time} '
+                f'waypoint_timeout:={config.waypoint_timeout}'
+            )
         cmd = ['bash', '-c', ros_cmd]
         _mark_first_roslaunch_if_needed()
 
@@ -285,7 +340,7 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
 
         return {
             "status": "started",
-            "message": "Coverage mission started successfully",
+            "message": "Mission started successfully",
             "scan_id": scan_id,
             "pid": mission_process.pid if mission_process else None,
             "config": config.dict(),
@@ -353,7 +408,7 @@ async def stop_coverage_mission(db: Session = Depends(get_db)):
 
     return {
         "status": "stopped",
-        "message": "Coverage mission stopped successfully",
+        "message": "Mission stopped successfully",
         "scan_id": stopped_scan_id,
         "captured_points": progress["captured_points"],
         "total_points": progress["total_points"],

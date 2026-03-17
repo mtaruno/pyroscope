@@ -3,6 +3,18 @@ import './ScanConfigModal.css'
 
 const AREA_OPTIONS = [1, 2, 3]
 const PRECISION_OPTIONS = [0.25, 0.5, 0.8, 1]
+const MISSION_OPTIONS = [
+  {
+    value: 'demo_waypoints',
+    label: 'Waypoint Controller',
+    description: 'Simpler 4-corner demo route. Recommended for the demo.'
+  },
+  {
+    value: 'coverage_planner',
+    label: 'Coverage Planner',
+    description: 'Full lawnmower coverage mission through move_base + coverage planner.'
+  },
+]
 const SCAN_SECONDS_PER_SQUARE_METER = 5
 const SCAN_SECONDS_PER_POINT = 8
 const FUEL_ESTIMATE_SECONDS_PER_POINT = 60
@@ -52,6 +64,7 @@ function formatDuration(totalSeconds) {
 }
 
 function ScanConfigModal({ open, onCancel, onConfirm }) {
+  const [missionMode, setMissionMode] = useState('demo_waypoints')
   const [areaSize, setAreaSize] = useState(3)
   const [precision, setPrecision] = useState(0.5)
   const [originX, setOriginX] = useState(0)
@@ -60,14 +73,17 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
   const [dwellTime, setDwellTime] = useState(2.0)
   const [waypointTimeout, setWaypointTimeout] = useState(30.0)
 
-  const totalPoints = useMemo(
-    () => calcTotalPoints(areaSize, precision, rowSpacing),
-    [areaSize, precision, rowSpacing]
-  )
+  const totalPoints = useMemo(() => {
+    if (missionMode === 'demo_waypoints') return 4
+    return calcTotalPoints(areaSize, precision, rowSpacing)
+  }, [missionMode, areaSize, precision, rowSpacing])
   const areaSquareMeters = areaSize * areaSize
-  const scanEstimateSeconds =
-    (areaSquareMeters * SCAN_SECONDS_PER_SQUARE_METER) +
-    (totalPoints * SCAN_SECONDS_PER_POINT)
+  const scanEstimateSeconds = missionMode === 'demo_waypoints'
+    ? Math.round((totalPoints * 15) + (totalPoints * Math.max(1, dwellTime)))
+    : (
+      (areaSquareMeters * SCAN_SECONDS_PER_SQUARE_METER) +
+      (totalPoints * SCAN_SECONDS_PER_POINT)
+    )
   const fullEstimateSeconds = scanEstimateSeconds + (totalPoints * FUEL_ESTIMATE_SECONDS_PER_POINT)
 
   if (!open) return null
@@ -76,6 +92,23 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
     <div className="scan-config-overlay" role="dialog" aria-label="Scan configuration">
       <div className="scan-config-content">
         <h3 className="scan-config-title">Start Scan Configuration</h3>
+
+        <div className="scan-config-group">
+          <p className="scan-config-label">Navigation Mode</p>
+          <div className="scan-config-mode-list">
+            {MISSION_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={`scan-config-mode-card ${missionMode === option.value ? 'active' : ''}`}
+                onClick={() => setMissionMode(option.value)}
+              >
+                <span className="scan-config-mode-title">{option.label}</span>
+                <span className="scan-config-mode-description">{option.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
 
         <div className="scan-config-group">
           <p className="scan-config-label">Area Size (meters)</p>
@@ -175,9 +208,19 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
         </div>
 
         <div className="scan-config-summary">
-          <p>Points per side: <strong>{Math.round(areaSize / precision) + 1}</strong></p>
+          <p>Mode: <strong>{missionMode === 'demo_waypoints' ? 'Waypoint Controller' : 'Coverage Planner'}</strong></p>
+          {missionMode === 'coverage_planner' && (
+            <p>Points per side: <strong>{Math.round(areaSize / precision) + 1}</strong></p>
+          )}
           <p>Total points: <strong>{totalPoints}</strong></p>
-          <p>Estimated scan time: <strong>{formatDuration(scanEstimateSeconds)}</strong> <span className="scan-config-note">(~5s per m² + ~8s per point)</span></p>
+          <p>
+            Estimated scan time: <strong>{formatDuration(scanEstimateSeconds)}</strong>{' '}
+            <span className="scan-config-note">
+              {missionMode === 'demo_waypoints'
+                ? '(simple 4-corner route; sampling precision is ignored)'
+                : '(~5s per m² + ~8s per point)'}
+            </span>
+          </p>
           <p>Estimated full result time: <strong>{formatDuration(fullEstimateSeconds)}</strong> <span className="scan-config-note">(includes fuel API, ~1m per point)</span></p>
         </div>
 
@@ -187,6 +230,7 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
             type="button"
             className="scan-config-btn confirm"
             onClick={() => onConfirm({
+              missionMode,
               areaSize,
               precision,
               totalPoints,
