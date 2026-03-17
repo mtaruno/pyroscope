@@ -223,6 +223,11 @@ function App() {
         if (progress?.status === 'completed' && !finishHandledRef.current) {
           const finishedScanId = activeScanId
           finishHandledRef.current = true
+          try {
+            await apiClient.stopCoverageMission()
+          } catch (stopError) {
+            console.error('Automatic mission cleanup failed:', stopError)
+          }
           setIsScanning(false)
           setRobotStatus(prev => ({ ...prev, operatingState: 'Idle' }))
           setScanPhase('Scan complete')
