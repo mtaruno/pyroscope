@@ -682,6 +682,7 @@ class CoveragePlanner:
         m = Marker()
         m.header.frame_id = self.goal_frame
         m.header.stamp = rospy.Time.now()
+        m.frame_locked = True
         m.ns = "coverage_waypoints"
         m.id = 0
         m.action = Marker.DELETEALL
@@ -695,6 +696,7 @@ class CoveragePlanner:
             m = Marker()
             m.header.frame_id = self.goal_frame
             m.header.stamp = rospy.Time.now()
+            m.frame_locked = True
             m.ns = "coverage_waypoints"
             m.id = i
             m.type = Marker.CYLINDER

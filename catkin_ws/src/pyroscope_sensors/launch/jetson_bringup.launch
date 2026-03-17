@@ -5,9 +5,12 @@
   <arg name="laser_roll" default="0.0"/>
   <arg name="laser_pitch" default="0.0"/>
   <arg name="laser_yaw" default="0.0"/>
+  <arg name="enable_teleop" default="false"/>
 
   <!-- Master bringup: base driver + odometry + TF -->
-  <include file="$(find transbot_bringup)/launch/bringup.launch"/>
+  <include file="$(find transbot_bringup)/launch/bringup.launch">
+    <arg name="enable_teleop" value="$(arg enable_teleop)"/>
+  </include>
 
   <!-- LiDAR -->
   <include file="$(find rplidar_ros)/launch/rplidar.launch"/>

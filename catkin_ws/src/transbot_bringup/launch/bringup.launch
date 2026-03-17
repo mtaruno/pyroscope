@@ -2,6 +2,7 @@
     <!-- PCB和PC之间通过USB串行通信 -->
     <!---USB serial communication between PCB and PC -->
     <arg name="use_gui" default="false"/>
+    <arg name="enable_teleop" default="false"/>
     <arg name="robot_model" default="astra" doc="robot_model type [astra,camera]"/>
     <!-- 获取相机设备服务 -->
     <!-- Get camera device service -->
@@ -42,6 +43,8 @@
         <param name="world_frame" value="enu"/>
         <param name="orientation_stddev" value="0.05"/>
         <param name="angular_scale" value="1.08"/>
+        <remap from="imu/data_raw" to="/transbot/imu"/>
+        <remap from="imu/data" to="/imu/data"/>
     </node>
     <!-- 发布静态坐标系转换 -->
     <!-- Post static coordinate system conversion -->
@@ -62,5 +65,5 @@
     </node>
     <!-- 手柄控制节点 -->
     <!-- Handle control node -->
-    <include file="$(find transbot_ctrl)/launch/transbot_joy.launch"/>
+    <include if="$(arg enable_teleop)" file="$(find transbot_ctrl)/launch/transbot_joy.launch"/>
 </launch>

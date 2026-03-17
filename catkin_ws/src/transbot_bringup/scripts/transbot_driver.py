@@ -30,9 +30,9 @@ class transbot_driver:
         vel = rospy.get_param("vel", "/transbot/get_vel")
         self.CameraDevice = rospy.get_param("CameraDevice", "astra")
         self.linear_max = rospy.get_param('~linear_speed_limit', 0.4)
-        self.linear_min = rospy.get_param('~linear_speed_limit', 0.0)
+        self.linear_min = rospy.get_param('~linear_speed_floor', 0.0)
         self.angular_max = rospy.get_param('~angular_speed_limit', 2.0)
-        self.angular_min = rospy.get_param('~angular_speed_limit', 0.0)
+        self.angular_min = rospy.get_param('~angular_speed_floor', 0.0)
         self.sub_cmd_vel = rospy.Subscriber("/cmd_vel", Twist, self.cmd_vel_callback, queue_size=10)
         self.sub_TargetAngle = rospy.Subscriber("/TargetAngle", Arm, self.sub_armcallback, queue_size=10)
         self.sub_PWMServo = rospy.Subscriber("/PWMServo", PWMServo, self.sub_PWMServocallback, queue_size=10)
@@ -103,6 +103,8 @@ class transbot_driver:
             # 发布陀螺仪的数据
 	        # Publish gyroscope data
             imu = Imu()
+            imu.header.stamp = rospy.Time.now()
+            imu.header.frame_id = "imu_link"
             imu.linear_acceleration.x = ax
             imu.linear_acceleration.y = ay
             imu.linear_acceleration.z = az
