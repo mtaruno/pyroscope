@@ -7,7 +7,10 @@ Publishes four odom-frame waypoints one at a time to waypoint_controller.py.
 
 import rospy
 from geometry_msgs.msg import PoseStamped, Twist
+from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, String
+import math
+import tf
 
 
 class DemoWaypointSequence:
@@ -20,34 +23,98 @@ class DemoWaypointSequence:
         self.skip_on_stall = rospy.get_param('~skip_on_stall', True)
         self.settle_time = rospy.get_param('~settle_time', 0.5)
         self.capture_on_skip = rospy.get_param('~capture_on_skip', True)
+        self.waypoints_relative_to_start = rospy.get_param('~waypoints_relative_to_start', True)
 
-        self.waypoints = [
+        self.waypoint_params = [
             (rospy.get_param('~x1', 1.0), rospy.get_param('~y1', 0.0)),
             (rospy.get_param('~x2', 1.0), rospy.get_param('~y2', 1.0)),
             (rospy.get_param('~x3', 0.0), rospy.get_param('~y3', 1.0)),
             (rospy.get_param('~x4', 0.0), rospy.get_param('~y4', 0.0)),
         ]
+        self.waypoints = list(self.waypoint_params)
 
         self.goal_reached = False
         self.progress_stalled = False
+        self.current_pose = None
+        self.start_pose = None
+        self.start_yaw = None
 
         self.target_pub = rospy.Publisher('/nav/target_waypoint', PoseStamped, queue_size=1)
         self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         self.capture_ready_pub = rospy.Publisher('/coverage/capture_ready', Bool, queue_size=1)
         self.progress_pub = rospy.Publisher('/coverage/progress', String, queue_size=1)
         self.complete_pub = rospy.Publisher('/coverage/complete', Bool, queue_size=1)
+        rospy.Subscriber('/odom', Odometry, self.odom_callback, queue_size=1)
         rospy.Subscriber('/nav/goal_reached', Bool, self.goal_reached_callback, queue_size=1)
         rospy.Subscriber('/nav/progress_stalled', Bool, self.progress_stalled_callback, queue_size=1)
 
         rospy.loginfo("Demo waypoint sequence initialized with %d waypoints", len(self.waypoints))
-        for index, waypoint in enumerate(self.waypoints, start=1):
+        mode = "robot start frame" if self.waypoints_relative_to_start else self.frame_id
+        rospy.loginfo("  Waypoints interpreted in: %s", mode)
+        for index, waypoint in enumerate(self.waypoint_params, start=1):
             rospy.loginfo("  %d: (%.2f, %.2f)", index, waypoint[0], waypoint[1])
+
+    def odom_callback(self, msg):
+        self.current_pose = msg.pose.pose
 
     def goal_reached_callback(self, msg):
         self.goal_reached = bool(msg.data)
 
     def progress_stalled_callback(self, msg):
         self.progress_stalled = bool(msg.data)
+
+    def get_yaw_from_quaternion(self, orientation):
+        quaternion = (
+            orientation.x,
+            orientation.y,
+            orientation.z,
+            orientation.w,
+        )
+        euler = tf.transformations.euler_from_quaternion(quaternion)
+        return euler[2]
+
+    def wait_for_start_pose(self):
+        if self.current_pose is not None:
+            return True
+
+        deadline = rospy.Time.now() + rospy.Duration(5.0)
+        rate = rospy.Rate(20)
+        while not rospy.is_shutdown() and rospy.Time.now() < deadline:
+            if self.current_pose is not None:
+                return True
+            rate.sleep()
+        return self.current_pose is not None
+
+    def resolve_waypoints(self):
+        if not self.waypoints_relative_to_start:
+            self.waypoints = list(self.waypoint_params)
+            return True
+
+        if not self.wait_for_start_pose():
+            rospy.logerr("No /odom pose available; cannot resolve robot-relative demo waypoints")
+            return False
+
+        self.start_pose = self.current_pose
+        self.start_yaw = self.get_yaw_from_quaternion(self.start_pose.orientation)
+
+        cos_yaw = math.cos(self.start_yaw)
+        sin_yaw = math.sin(self.start_yaw)
+        resolved_waypoints = []
+        for rel_x, rel_y in self.waypoint_params:
+            odom_x = self.start_pose.position.x + (rel_x * cos_yaw) - (rel_y * sin_yaw)
+            odom_y = self.start_pose.position.y + (rel_x * sin_yaw) + (rel_y * cos_yaw)
+            resolved_waypoints.append((odom_x, odom_y))
+
+        self.waypoints = resolved_waypoints
+        rospy.loginfo(
+            "Locked robot-relative demo route from start pose (%.2f, %.2f, yaw %.2f rad)",
+            self.start_pose.position.x,
+            self.start_pose.position.y,
+            self.start_yaw,
+        )
+        for index, waypoint in enumerate(self.waypoints, start=1):
+            rospy.loginfo("  Odom waypoint %d: (%.2f, %.2f)", index, waypoint[0], waypoint[1])
+        return True
 
     def publish_waypoint(self, x, y):
         msg = PoseStamped()
@@ -112,6 +179,8 @@ class DemoWaypointSequence:
 
     def run(self):
         rospy.sleep(1.0)
+        if not self.resolve_waypoints():
+            return
         self.complete_pub.publish(Bool(data=False))
         self.capture_ready_pub.publish(Bool(data=False))
         self.publish_progress(0)

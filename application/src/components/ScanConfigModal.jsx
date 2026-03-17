@@ -209,6 +209,11 @@ function ScanConfigModal({ open, onCancel, onConfirm }) {
 
         <div className="scan-config-summary">
           <p>Mode: <strong>{missionMode === 'demo_waypoints' ? 'Waypoint Controller' : 'Coverage Planner'}</strong></p>
+          {missionMode === 'demo_waypoints' && (
+            <p className="scan-config-note">
+              Demo route is robot-relative: the first leg starts forward from the robot&apos;s heading at scan start. Origin is ignored in this mode.
+            </p>
+          )}
           {missionMode === 'coverage_planner' && (
             <p>Points per side: <strong>{Math.round(areaSize / precision) + 1}</strong></p>
           )}

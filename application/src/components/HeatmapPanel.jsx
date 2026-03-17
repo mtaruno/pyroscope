@@ -7,6 +7,50 @@ import './HeatmapPanel.css'
 import SimpleHeatmap from './SimpleHeatmap'
 import apiClient from '../services/api'
 
+const formatLegendValue = (value) => {
+    if (!Number.isFinite(value)) return '-'
+    if (Math.abs(value) >= 10 || Number.isInteger(value)) return String(Math.round(value))
+    return value.toFixed(2)
+}
+
+const legendMeaningByLayer = {
+    plant_temp: {
+        low: 'Cooler ground',
+        high: 'Hotter ground',
+        note: 'Blue/green marks cooler areas. Yellow/red marks hotter surfaces that may need attention.',
+    },
+    air_temp: {
+        low: 'Cooler air',
+        high: 'Hotter air',
+        note: 'Use this to compare ambient air pockets across the scan footprint.',
+    },
+    humidity: {
+        low: 'Drier air',
+        high: 'More humid air',
+        note: 'Low humidity areas are drier. High humidity areas hold more moisture.',
+    },
+    one_hour_fuel: {
+        low: 'Less fine fuel',
+        high: 'More fine fuel',
+        note: 'Higher values indicate more short-lag fine fuel loading at that point.',
+    },
+    ten_hour_fuel: {
+        low: 'Less medium fuel',
+        high: 'More medium fuel',
+        note: 'Higher values indicate more 10-hour fuel loading.',
+    },
+    hundred_hour_fuel: {
+        low: 'Less heavy fuel',
+        high: 'More heavy fuel',
+        note: 'Higher values indicate more 100-hour fuel loading.',
+    },
+    fire_risk: {
+        low: 'Lower concern',
+        high: 'Higher concern',
+        note: 'Blue/green is lower fire-risk score. Yellow/red is higher fire-risk score.',
+    },
+}
+
 // Boundary layer component (50m and 200m boundaries)
 function BoundaryLayer({ dataPoints }) {
     const map = useMap()
@@ -188,6 +232,11 @@ function HeatmapPanel({ scanId, centerLat, centerLng, refreshKey }) {
 
     // Get current layer configuration
     const currentLayer = layers.find(l => l.id === activeLayer)
+    const legendMeaning = legendMeaningByLayer[activeLayer] || {
+        low: 'Lower values',
+        high: 'Higher values',
+        note: 'Color intensity increases from left to right.',
+    }
     const currentValues = (heatmapData?.data_points || [])
         .map(point => currentLayer?.extractor(point))
         .filter(value => Number.isFinite(value))
@@ -278,20 +327,26 @@ function HeatmapPanel({ scanId, centerLat, centerLng, refreshKey }) {
                         </>
                     )}
                 </MapContainer>
-            </div>
-
-            {/* Legend */}
-            <div className="heatmap-legend">
-                <div className="legend-header">
-                    <span className="legend-title">{currentLayer?.name}</span>
-                    {currentLayer?.unit && (
-                        <span className="legend-unit">({currentLayer.unit})</span>
-                    )}
-                </div>
-                <div className="legend-gradient"></div>
-                <div className="legend-labels">
-                    <span>{legendMin}</span>
-                    <span>{legendMax}</span>
+                {/* Legend */}
+                <div className="heatmap-legend">
+                    <div className="legend-header">
+                        <span className="legend-title">{currentLayer?.name}</span>
+                        {currentLayer?.unit && (
+                            <span className="legend-unit">({currentLayer.unit})</span>
+                        )}
+                    </div>
+                    <div className="legend-gradient">
+                        <span className="legend-label">{legendMeaning.low}</span>
+                        <div className="gradient-bar"></div>
+                        <span className="legend-label">{legendMeaning.high}</span>
+                    </div>
+                    <div className="legend-values">
+                        <span>{formatLegendValue(legendMin)}</span>
+                        <span>{formatLegendValue(legendMax)}</span>
+                    </div>
+                    <div className="legend-note">
+                        {legendMeaning.note}
+                    </div>
                 </div>
             </div>
         </div>

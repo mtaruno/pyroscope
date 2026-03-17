@@ -267,30 +267,24 @@ def _calc_total_waypoints(area_width: float, area_height: float,
 
 
 def _calc_demo_rectangle(area_width: float, area_height: float,
-                         origin_x: float, origin_y: float,
                          wall_margin: float = 0.30) -> dict:
-    """Build a simple four-corner rectangle in odom frame for demo waypoint mode."""
-    half_w = area_width / 2.0
-    half_h = area_height / 2.0
-    x_min = origin_x - half_w + wall_margin
-    x_max = origin_x + half_w - wall_margin
-    y_min = origin_y - half_h + wall_margin
-    y_max = origin_y + half_h - wall_margin
+    """Build a simple four-corner rectangle in the robot start frame.
 
-    if x_min > x_max:
-        x_min = x_max = origin_x
-    if y_min > y_max:
-        y_min = y_max = origin_y
+    The robot's pose at mission start becomes the local origin, and the first
+    leg is always straight forward from the robot's current heading.
+    """
+    width = max(0.0, area_width - (2.0 * wall_margin))
+    height = max(0.0, area_height - (2.0 * wall_margin))
 
     return {
-        "x1": x_min,
-        "y1": y_min,
-        "x2": x_max,
-        "y2": y_min,
-        "x3": x_max,
-        "y3": y_max,
-        "x4": x_min,
-        "y4": y_max,
+        "x1": width,
+        "y1": 0.0,
+        "x2": width,
+        "y2": height,
+        "x3": 0.0,
+        "y3": height,
+        "x4": 0.0,
+        "y4": 0.0,
     }
 
 
@@ -348,8 +342,6 @@ async def start_coverage_mission(config: MissionConfig = None, db: Session = Dep
             demo_rectangle = _calc_demo_rectangle(
                 area_width,
                 area_height,
-                config.origin_x,
-                config.origin_y,
             )
             ros_cmd = (
                 f'source /opt/ros/melodic/setup.bash && '

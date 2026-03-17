@@ -81,14 +81,39 @@ function App() {
   const fuelProgressStartRef = useRef(0)
   const FUEL_PROGRESS_CAP = 94
   const FUEL_TIMEOUT_MS = 120000
+  const SCAN_PAGE_SIZE = 100
 
   // Load scans from API on component mount
   useEffect(() => {
+    const fetchAllScans = async () => {
+      const allScans = []
+      let offset = 0
+      let total = Infinity
+
+      while (offset < total) {
+        const response = await apiClient.getScans({ limit: SCAN_PAGE_SIZE, offset })
+        const pageScans = Array.isArray(response?.scans) ? response.scans : []
+        total = Number.isFinite(response?.total) ? response.total : pageScans.length
+        allScans.push(...pageScans)
+
+        if (pageScans.length < SCAN_PAGE_SIZE) {
+          break
+        }
+
+        offset += SCAN_PAGE_SIZE
+      }
+
+      return {
+        total: allScans.length,
+        scans: allScans
+      }
+    }
+
     const loadScans = async () => {
       setIsLoadingScans(true)
       try {
-        // Try to load scans - works with or without authentication
-        const response = await apiClient.getScans({ limit: 50 }).catch(() => ({ total: 0, scans: [] }))
+        // Load the full scan history in pages so older records still appear on the map/history.
+        const response = await fetchAllScans().catch(() => ({ total: 0, scans: [] }))
 
         if (response && response.scans) {
           // Transform API data to map markers format
